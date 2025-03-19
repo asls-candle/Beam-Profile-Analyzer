@@ -195,14 +195,24 @@ class MainWindow(QMainWindow):
         
     def set_default_state(self):
         """Установка состояния по умолчанию"""
-        # Устанавливаем режим работы с камерой по умолчанию
-        self.camera_mode_radio.setChecked(True)
-        self.mode_changed()
+        # Устанавливаем режим чтения из файла по умолчанию
+        self.file_mode_radio.setChecked(True)
         
         # Отключаем кнопки управления камерой
         self.disconnect_btn.setEnabled(False)
         self.capture_btn.setEnabled(False)
         self.collect_bg_btn.setEnabled(False)
+        
+        # Очищаем все виджеты
+        self.main_widget.clear()
+        self.background_widget.clear()
+        self.diff_widget.clear()
+        
+        # Отключаем кнопку сохранения, так как данных еще нет
+        self.save_btn.setEnabled(False)
+        
+        # Применяем первоначальное изменение режима
+        self.mode_changed()
         
     def mode_changed(self):
         """Обработка изменения режима работы"""
@@ -219,7 +229,7 @@ class MainWindow(QMainWindow):
         self.load_btn.setEnabled(not camera_mode)
         self.save_btn.setEnabled(self.data_processor.has_data())
         
-        # Если переключаемся из режима камеры, то останавливаем захват
+        # Если переключаемся из режима камеры в режим файла, то останавливаем захват
         if not camera_mode and self.is_capturing:
             self.toggle_capture()
             
@@ -403,93 +413,119 @@ class MainWindow(QMainWindow):
                 "Файлы NumPy (*.npy);;Файлы MATLAB (*.mat);;Все файлы (*.*)"
             )
             
-            if file_path:
-                logging.info(f"Загрузка данных из файла: {file_path}")
+            if not file_path:
+                return  # Пользователь отменил выбор файла
                 
-                # Загружаем данные из файла
-                if file_path.lower().endswith('.npy'):
-                    data = self.data_processor.load_from_npy(file_path)
-                elif file_path.lower().endswith('.mat'):
-                    data = self.data_processor.load_from_mat(file_path)
+            logging.info(f"Загрузка данных из файла: {file_path}")
+            
+            # Очищаем текущие данные
+            self.main_widget.clear()
+            self.background_widget.clear()
+            self.diff_widget.clear()
+            
+            # Загружаем данные из файла
+            if file_path.lower().endswith('.npy'):
+                data = self.data_processor.load_from_npy(file_path)
+            elif file_path.lower().endswith('.mat'):
+                data = self.data_processor.load_from_mat(file_path)
+            else:
+                raise ValueError(f"Неподдерживаемый формат файла: {file_path}")
+            
+            # Если данные не загружены, выходим
+            if data is None or data.size == 0:
+                QMessageBox.warning(self, "Предупреждение", "Данные в файле пусты или повреждены")
+                return
+                
+            # Проверяем размерность данных
+            if len(data.shape) != 2:
+                QMessageBox.warning(self, "Предупреждение", f"Неправильный формат данных: ожидается 2D массив, получен {len(data.shape)}D")
+                return
+                
+            # Показываем информацию о загруженных данных
+            height, width = data.shape
+            logging.info(f"Загружены данные размером {width}x{height}, диапазон значений: [{np.min(data)}-{np.max(data)}]")
+                
+            # Пытаемся найти фоновый файл
+            bg_file = self.data_processor.find_background_file(file_path)
+            if bg_file and os.path.exists(bg_file):
+                logging.info(f"Найден фоновый файл: {bg_file}")
+                
+                # Загружаем фоновые данные
+                if bg_file.lower().endswith('.npy'):
+                    bg_data = self.data_processor.load_from_npy(bg_file)
+                elif bg_file.lower().endswith('.mat'):
+                    bg_data = self.data_processor.load_from_mat(bg_file)
                 else:
-                    raise ValueError("Неподдерживаемый формат файла")
+                    bg_data = None
+                    
+                # Проверяем фоновые данные
+                if bg_data is not None and bg_data.shape == data.shape:
+                    self.data_processor.set_background(bg_data)
+                    logging.info(f"Загружен фоновый файл размером {bg_data.shape}")
+                else:
+                    logging.warning(f"Фоновые данные не загружены или не соответствуют размеру основных данных")
+            else:
+                logging.info("Фоновый файл не найден")
+            
+            # Устанавливаем основные данные и рассчитываем параметры
+            self.data_processor.set_data(data)
+            
+            # Получаем проекции и статистики
+            x_proj, y_proj = self.data_processor.calculate_projections()
+            centroid_x, centroid_y = self.data_processor.calculate_centroids()
+            rms_x, rms_y = self.data_processor.calculate_rms()
+            
+            # Получаем координатные сетки
+            x_mm, y_mm = self.data_processor.get_coordinate_grids()
+            
+            # Обновляем виджет с данными
+            self.main_widget.update_data(
+                data, x_mm, y_mm, centroid_x, centroid_y, 
+                rms_x, rms_y, x_proj, y_proj
+            )
+            
+            # Активируем вкладку с основным изображением
+            self.tabs.setCurrentWidget(self.main_tab)
+            
+            # Если есть фоновые данные, обновляем соответствующие виджеты
+            if self.data_processor.has_background():
+                bg_data = self.data_processor.get_background()
                 
-                # Если данные загружены, обрабатываем их
-                if data is not None:
-                    # Устанавливаем загруженные данные
-                    self.data_processor.set_data(data)
+                # Обновляем виджет с фоновыми данными
+                bg_x_proj, bg_y_proj = self.data_processor.calculate_projections(bg_data)
+                bg_centroid_x, bg_centroid_y = self.data_processor.calculate_centroids(bg_data)
+                bg_rms_x, bg_rms_y = self.data_processor.calculate_rms(bg_data)
+                
+                self.background_widget.update_data(
+                    bg_data, x_mm, y_mm, bg_centroid_x, bg_centroid_y, 
+                    bg_rms_x, bg_rms_y, bg_x_proj, bg_y_proj
+                )
+                
+                # Рассчитываем разницу между данными и фоном
+                diff_data = self.data_processor.calculate_difference()
+                
+                if diff_data is not None:
+                    # Вычисляем параметры разностного изображения
+                    diff_x_proj, diff_y_proj = self.data_processor.calculate_projections(diff_data)
+                    diff_centroid_x, diff_centroid_y = self.data_processor.calculate_centroids(diff_data)
+                    diff_rms_x, diff_rms_y = self.data_processor.calculate_rms(diff_data)
                     
-                    # Пытаемся найти фоновый файл
-                    bg_file = self.data_processor.find_background_file(file_path)
-                    if bg_file:
-                        # Загружаем фоновые данные
-                        if bg_file.lower().endswith('.npy'):
-                            bg_data = self.data_processor.load_from_npy(bg_file)
-                        elif bg_file.lower().endswith('.mat'):
-                            bg_data = self.data_processor.load_from_mat(bg_file)
-                            
-                        if bg_data is not None:
-                            self.data_processor.set_background(bg_data)
-                            logging.info(f"Загружен фоновый файл: {bg_file}")
-                    
-                    # Получаем проекции и статистики
-                    x_proj, y_proj = self.data_processor.calculate_projections()
-                    centroid_x, centroid_y = self.data_processor.calculate_centroids()
-                    rms_x, rms_y = self.data_processor.calculate_rms()
-                    
-                    # Получаем координатные сетки
-                    x_mm, y_mm = self.data_processor.get_coordinate_grids()
-                    
-                    # Обновляем виджет с данными
-                    self.main_widget.update_data(
-                        data, x_mm, y_mm, centroid_x, centroid_y, 
-                        rms_x, rms_y, x_proj, y_proj
+                    # Обновляем виджет с разностными данными
+                    self.diff_widget.update_data(
+                        diff_data, x_mm, y_mm, diff_centroid_x, diff_centroid_y, 
+                        diff_rms_x, diff_rms_y, diff_x_proj, diff_y_proj
                     )
-                    
-                    # Активируем вкладку с основным изображением
-                    self.tabs.setCurrentWidget(self.main_tab)
-                    
-                    # Если есть фоновые данные, обновляем соответствующие виджеты
-                    if self.data_processor.has_background():
-                        bg_data = self.data_processor.get_background()
-                        
-                        # Обновляем виджет с фоновыми данными
-                        self.data_processor.set_data(bg_data)
-                        x_proj, y_proj = self.data_processor.calculate_projections()
-                        centroid_x, centroid_y = self.data_processor.calculate_centroids()
-                        rms_x, rms_y = self.data_processor.calculate_rms()
-                        
-                        self.background_widget.update_data(
-                            bg_data, x_mm, y_mm, centroid_x, centroid_y, 
-                            rms_x, rms_y, x_proj, y_proj
-                        )
-                        
-                        # Обновляем виджет с разностными данными
-                        self.data_processor.set_data(data)
-                        diff_data = self.data_processor.calculate_difference()
-                        
-                        self.data_processor.set_data(diff_data)
-                        x_proj, y_proj = self.data_processor.calculate_projections()
-                        centroid_x, centroid_y = self.data_processor.calculate_centroids()
-                        rms_x, rms_y = self.data_processor.calculate_rms()
-                        
-                        self.diff_widget.update_data(
-                            diff_data, x_mm, y_mm, centroid_x, centroid_y, 
-                            rms_x, rms_y, x_proj, y_proj
-                        )
-                        
-                        # Возвращаем исходные данные в обработчик
-                        self.data_processor.set_data(data)
-                    
-                    # Обновляем состояние кнопки сохранения
-                    self.save_btn.setEnabled(True)
-                    
-                    QMessageBox.information(self, "Загрузка", "Данные успешно загружены")
-                    logging.info("Данные успешно загружены")
-                
+            
+            # Активируем кнопку сохранения
+            self.save_btn.setEnabled(True)
+            
+            QMessageBox.information(self, "Загрузка", f"Данные успешно загружены: {width}x{height}")
+            logging.info("Данные успешно загружены и отображены")
+            
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка при загрузке файла: {str(e)}")
             logging.error(f"Ошибка при загрузке файла: {str(e)}")
+            logging.exception(e)
             
     def save_data(self):
         """Сохранение данных в файл"""
