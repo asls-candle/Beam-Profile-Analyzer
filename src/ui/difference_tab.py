@@ -168,7 +168,7 @@ class DifferenceTab(QWidget):
         )
         
         # Проекции разницы
-        x_coords, x_proj, y_coords, y_proj = self.main_window.image_analyzer.calculate_projections(
+        x_coords, y_coords, x_proj, y_proj = self.main_window.image_analyzer.calculate_projections(
             data["difference"],
             pixel_size_x,
             pixel_size_y

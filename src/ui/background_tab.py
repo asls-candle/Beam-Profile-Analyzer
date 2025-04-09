@@ -168,7 +168,7 @@ class BackgroundTab(QWidget):
         )
         
         # Проекции фона
-        x_coords, x_proj, y_coords, y_proj = self.main_window.image_analyzer.calculate_projections(
+        x_coords, y_coords, x_proj, y_proj = self.main_window.image_analyzer.calculate_projections(
             data["background"],
             pixel_size_x,
             pixel_size_y

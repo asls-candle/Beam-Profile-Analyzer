@@ -49,8 +49,8 @@ class ImageAnalyzer:
             
         Returns:
             x_coords: Координаты по оси X (мм)
-            x_proj: Проекция на ось X
             y_coords: Координаты по оси Y (мм)
+            x_proj: Проекция на ось X
             y_proj: Проекция на ось Y
         """
         if image is None or image.size == 0:
@@ -59,14 +59,16 @@ class ImageAnalyzer:
         # Применяем ROI если задан
         processed_image = self.apply_roi(image)
         
+        # Получаем размеры изображения
+        height, width = processed_image.shape
+        
         # Создаем координатную сетку (в пикселях)
-        y_size, x_size = processed_image.shape
-        x_grid = np.arange(x_size)
-        y_grid = np.arange(y_size)
+        x_grid = np.linspace(-(width-1)/2, (width-1)/2, width)
+        y_grid = np.linspace(-(height-1)/2, (height-1)/2, height)
         
         # Проекция на оси X и Y (сумма интенсивности по соответствующим осям)
-        x_proj = np.sum(processed_image, axis=0)
-        y_proj = np.sum(processed_image, axis=1)
+        x_proj = np.sum(processed_image, axis=0)  # Сумма по строкам
+        y_proj = np.sum(processed_image, axis=1)  # Сумма по столбцам
         
         # Нормализация проекций относительно максимального значения
         if np.max(x_proj) > 0:
@@ -74,11 +76,11 @@ class ImageAnalyzer:
         if np.max(y_proj) > 0:
             y_proj = y_proj / np.max(y_proj)
         
-        # Преобразование в милиметры
+        # Преобразование в миллиметры
         x_coords = x_grid * pixel_size_x
         y_coords = y_grid * pixel_size_y
         
-        return x_coords, x_proj, y_coords, y_proj
+        return x_coords, y_coords, x_proj, y_proj
     
     def calculate_centroid(self, image, pixel_size_x, pixel_size_y):
         """

@@ -355,46 +355,46 @@ class CameraTab(QWidget):
             
     def update_plots(self):
         """
-        Обновляет все графики
+        Обновляет все графики на основе текущих данных
         """
-        # Получаем текущие данные
-        data = self.main_window.get_current_data()
-        camera_info = self.main_window.get_camera_info()
-        
-        if data["current_frame"] is None or camera_info is None:
+        if not hasattr(self, 'file_data') or self.file_data is None:
             return
             
-        # Получаем информацию о камере
-        pixel_size_x = camera_info.get("pixel_size_x", 1)
-        pixel_size_y = camera_info.get("pixel_size_y", 1)
+        # Получаем текущий кадр и информацию о камере
+        current_frame = self.file_data.get('current_frame')
+        if current_frame is None:
+            return
+            
+        camera_info = self.file_data.get('camera_info', {})
+        pixel_size_x = camera_info.get('pixel_size_x', 1)
+        pixel_size_y = camera_info.get('pixel_size_y', 1)
         
-        # Тепловая карта
-        heatmap_fig = self.main_window.plot_manager.create_heatmap_figure(
-            data["current_frame"],
-            pixel_size_x,
+        # Рассчитываем проекции
+        x_coords, y_coords, x_proj, y_proj = self.analyzer.calculate_projections(
+            current_frame, 
+            pixel_size_x, 
             pixel_size_y
         )
         
-        # Проекции
-        x_coords, x_proj, y_coords, y_proj = self.main_window.image_analyzer.calculate_projections(
-            data["current_frame"],
-            pixel_size_x,
-            pixel_size_y
-        )
-        
+        if x_coords is None:
+            return
+            
         # Аппроксимация гауссианой
-        if x_coords is not None and x_proj is not None:
-            _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_coords, x_proj)
-        else:
-            gauss_x = None
-            
-        if y_coords is not None and y_proj is not None:
-            _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_coords, y_proj)
-        else:
-            gauss_y = None
-            
-        x_proj_fig, y_proj_fig = self.main_window.plot_manager.create_projection_figure(
-            x_coords, x_proj, y_coords, y_proj, gauss_x, gauss_y
+        _, x_gauss = self.analyzer.fit_gaussian(x_coords, x_proj)
+        _, y_gauss = self.analyzer.fit_gaussian(y_coords, y_proj)
+        
+        # Создаем тепловую карту
+        heatmap_figure = self.plot_manager.create_heatmap_figure(
+            current_frame,
+            pixel_size_x=pixel_size_x,
+            pixel_size_y=pixel_size_y
+        )
+        
+        # Создаем проекции
+        x_proj_figure, y_proj_figure = self.plot_manager.create_projection_figure(
+            x_coords, x_proj, y_coords, y_proj,
+            gauss_x=x_gauss,
+            gauss_y=y_gauss
         )
         
         # Очищаем текущие графики
@@ -411,23 +411,14 @@ class CameraTab(QWidget):
             self.y_proj_canvas.close()
             
         # Создаем новые canvas
-        self.heatmap_canvas = self.main_window.plot_manager.create_canvas_from_figure(heatmap_fig)
-        self.x_proj_canvas = self.main_window.plot_manager.create_canvas_from_figure(x_proj_fig)
-        self.y_proj_canvas = self.main_window.plot_manager.create_canvas_from_figure(y_proj_fig)
+        self.heatmap_canvas = self.plot_manager.create_canvas_from_figure(heatmap_figure)
+        self.x_proj_canvas = self.plot_manager.create_canvas_from_figure(x_proj_figure)
+        self.y_proj_canvas = self.plot_manager.create_canvas_from_figure(y_proj_figure)
         
         # Добавляем canvas на макеты
         self.heatmap_layout.addWidget(self.heatmap_canvas)
         self.x_proj_layout.addWidget(self.x_proj_canvas)
         self.y_proj_layout.addWidget(self.y_proj_canvas)
-        
-        # Обновляем информацию о центроиде и RMS
-        centroid_x, centroid_y = data["centroid"]
-        rms_x, rms_y = data["rms"]
-        
-        self.centroid_x_label.setText(f"Центроид X: {centroid_x:.6f} мм")
-        self.centroid_y_label.setText(f"Центроид Y: {centroid_y:.6f} мм")
-        self.rms_x_label.setText(f"RMS X: {rms_x:.6f} мм")
-        self.rms_y_label.setText(f"RMS Y: {rms_y:.6f} мм")
         
     def update_tab(self):
         """
