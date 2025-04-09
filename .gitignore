@@ -184,5 +184,4 @@ _dev/
 *.mat
 *.png
 logs/
-data/
 output/

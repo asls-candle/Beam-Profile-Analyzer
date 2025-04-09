@@ -284,12 +284,28 @@ class MainWindow(QMainWindow):
         # Переключаемся в режим чтения файла
         self.current_mode = "file"
         
-        # Сохраняем данные в буфер
-        self.file_data = data
-        self.file_data["filepath"] = filepath
+        # Инициализируем file_data с базовой структурой во избежание KeyError
+        self.file_data = {
+            "shot": None,
+            "background": None,
+            "difference": None,
+            "current_frame": None,
+            "raw_shot": None,
+            "raw_background": None,
+            "resolution": (0, 0),
+            "pixel_size_x": 1.0,
+            "pixel_size_y": 1.0,
+            "camera_name": "Неизвестная камера",
+            "centroid": (0, 0),
+            "rms": (0, 0),
+            "filepath": filepath
+        }
         
-        # Вычисляем центроид и RMS
-        if self.file_data["shot"] is not None:
+        # Обновляем данные из импортированного словаря
+        self.file_data.update(data)
+        
+        # Вычисляем центроид и RMS, если они не были вычислены при импорте
+        if "shot" in data and data["shot"] is not None and "centroid" not in data:
             pixel_size_x = self.file_data.get("pixel_size_x", 1)
             pixel_size_y = self.file_data.get("pixel_size_y", 1)
             

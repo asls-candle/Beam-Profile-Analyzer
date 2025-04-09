@@ -8,12 +8,26 @@ from PyQt5.QtWidgets import QApplication
 import matplotlib
 matplotlib.use('Qt5Agg')  # Задаем Qt5 как бэкенд для matplotlib
 
+import logging
+import logging.config
+from src.config.log_config import log_config
+from src.config.paths import PATH
 from src.ui.main_window import MainWindow
+
+# Создаем директорию для логов, если её нет
+os.makedirs(PATH["logs_dir"], exist_ok=True)
+
+# Инициализируем систему логирования
+logging.config.dictConfig(log_config)
+
+logger = logging.getLogger('app')
 
 def main():
     """
     Главная функция запуска приложения
     """
+    logger.info("Запуск приложения")
+    
     # Создаем приложение Qt
     app = QApplication(sys.argv)
     
