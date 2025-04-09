@@ -38,7 +38,7 @@ class PlotManager:
         y = np.arange(height) * pixel_size_y
         
         # Создаем фигуру
-        fig = Figure(figsize=(5, 5))
+        fig = Figure(figsize=(5, 5), constrained_layout=True)
         ax = fig.add_subplot(111)
         
         # Строим тепловую карту
@@ -53,7 +53,6 @@ class PlotManager:
         # Добавляем шкалу цветов
         fig.colorbar(im, ax=ax, label="Интенсивность")
         
-        fig.tight_layout()
         return fig
     
     def create_projection_figure(self, x_coords, x_proj, y_coords, y_proj, gauss_x=None, gauss_y=None):
@@ -89,7 +88,7 @@ class PlotManager:
             return fig_x, fig_y
         
         # Создаем фигуру для X-проекции
-        fig_x = Figure(figsize=(5, 1))
+        fig_x = Figure(figsize=(5, 1), constrained_layout=True)
         ax_x = fig_x.add_subplot(111)
         
         # Строим проекцию на ось X
@@ -108,10 +107,8 @@ class PlotManager:
         ax_x.set_xlim(x_coords[0], x_coords[-1])
         ax_x.set_ylim(0, 1.05)
         
-        fig_x.tight_layout()
-        
         # Создаем фигуру для Y-проекции (с инвертированными осями)
-        fig_y = Figure(figsize=(1, 5))
+        fig_y = Figure(figsize=(1, 5), constrained_layout=True)
         ax_y = fig_y.add_subplot(111)
         
         # Строим проекцию на ось Y (инвертируем оси!)
@@ -129,8 +126,6 @@ class PlotManager:
         # Настраиваем оси
         ax_y.set_ylim(y_coords[0], y_coords[-1])
         ax_y.set_xlim(0, 1.05)
-        
-        fig_y.tight_layout()
         
         return fig_x, fig_y
     
@@ -161,7 +156,9 @@ class PlotManager:
             bool: True если сохранение успешно, иначе False
         """
         try:
-            figure.savefig(filepath, dpi=dpi, bbox_inches='tight')
+            # Устанавливаем DPI через свойство фигуры
+            figure.set_dpi(dpi)
+            figure.savefig(filepath, bbox_inches='tight')
             return True
         except Exception as e:
             print(f"Ошибка при сохранении фигуры: {e}")
