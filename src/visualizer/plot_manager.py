@@ -37,22 +37,31 @@ class PlotManager:
         x = np.arange(width) * pixel_size_x
         y = np.arange(height) * pixel_size_y
         
-        # Создаем фигуру
-        fig = Figure(figsize=(5, 5), constrained_layout=True)
+        # Создаем фигуру с жестко заданными полями
+        fig = Figure(figsize=(5, 5))
+        fig.subplots_adjust(left=0.15, right=0.85, bottom=0.15, top=0.9)
         ax = fig.add_subplot(111)
         
         # Строим тепловую карту
         im = ax.imshow(data, cmap=self.colormap, origin='lower', 
-                       extent=[0, width * pixel_size_x, 0, height * pixel_size_y])
+                       extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+                       aspect='auto')  # Автоматическое соотношение сторон
         
         # Добавляем заголовок и подписи осей
-        ax.set_title("Профиль пучка")
-        ax.set_xlabel("X (мм)")
-        ax.set_ylabel("Y (мм)")
+        ax.set_title("Профиль пучка", fontsize=10)
+        ax.set_xlabel("X (мм)", fontsize=9)
+        ax.set_ylabel("Y (мм)", fontsize=9)
         
-        # Добавляем шкалу цветов
-        fig.colorbar(im, ax=ax, label="Интенсивность")
-        
+        # Добавляем шкалу цветов c точными настройками положения
+        fig.colorbar(
+            im,
+            ax=ax,
+            label="Интенсивность", 
+            fraction=0.046,
+            pad=0.04,
+            orientation='vertical'
+        )
+                
         return fig
     
     def create_projection_figure(self, x_coords, x_proj, y_coords, y_proj, gauss_x=None, gauss_y=None):
@@ -77,18 +86,19 @@ class PlotManager:
             len(y_coords) == 0 or len(y_proj) == 0):
             
             # Создаем пустые фигуры
-            fig_x = Figure(figsize=(5, 1))
+            fig_x = Figure(figsize=(5, 1.5))
             ax_x = fig_x.add_subplot(111)
             ax_x.set_title("Нет данных")
             
-            fig_y = Figure(figsize=(1, 5))
+            fig_y = Figure(figsize=(1.5, 5))
             ax_y = fig_y.add_subplot(111)
             ax_y.set_title("Нет данных")
             
             return fig_x, fig_y
         
-        # Создаем фигуру для X-проекции
-        fig_x = Figure(figsize=(5, 1), constrained_layout=True)
+        # Создаем фигуру для X-проекции с явно заданными полями
+        fig_x = Figure(figsize=(5, 1.5))
+        fig_x.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.9)
         ax_x = fig_x.add_subplot(111)
         
         # Строим проекцию на ось X
@@ -97,18 +107,20 @@ class PlotManager:
         # Если есть Гауссово приближение, добавляем его
         if gauss_x is not None:
             ax_x.plot(x_coords, gauss_x, 'r--', linewidth=1, label='Гаусс')
-            ax_x.legend(loc='upper right', fontsize='small')
+            ax_x.legend(loc='upper right', fontsize='x-small')
             
-        ax_x.set_xlabel("X (мм)")
-        ax_x.set_ylabel("Интенсивность")
-        ax_x.grid(True, linestyle='--', alpha=0.7)
+        ax_x.set_xlabel("X (мм)", fontsize=9)
+        ax_x.set_ylabel("Интенсивность", fontsize=9)
+        ax_x.grid(True, linestyle='--', alpha=0.5)
+        ax_x.tick_params(labelsize=8)
         
         # Настраиваем оси
         ax_x.set_xlim(x_coords[0], x_coords[-1])
         ax_x.set_ylim(0, 1.05)
         
-        # Создаем фигуру для Y-проекции (с инвертированными осями)
-        fig_y = Figure(figsize=(1, 5), constrained_layout=True)
+        # Создаем фигуру для Y-проекции с явно заданными полями
+        fig_y = Figure(figsize=(1.5, 5))
+        fig_y.subplots_adjust(left=0.25, right=0.85, bottom=0.15, top=0.9)
         ax_y = fig_y.add_subplot(111)
         
         # Строим проекцию на ось Y (инвертируем оси!)
@@ -117,11 +129,12 @@ class PlotManager:
         # Если есть Гауссово приближение, добавляем его
         if gauss_y is not None:
             ax_y.plot(gauss_y, y_coords, 'r--', linewidth=1, label='Гаусс')
-            ax_y.legend(loc='upper right', fontsize='small')
+            ax_y.legend(loc='upper right', fontsize='x-small')
             
-        ax_y.set_ylabel("Y (мм)")
-        ax_y.set_xlabel("Интенсивность")
-        ax_y.grid(True, linestyle='--', alpha=0.7)
+        ax_y.set_ylabel("Y (мм)", fontsize=9)
+        ax_y.set_xlabel("Интенсивность", fontsize=9)
+        ax_y.grid(True, linestyle='--', alpha=0.5)
+        ax_y.tick_params(labelsize=8)
         
         # Настраиваем оси
         ax_y.set_ylim(y_coords[0], y_coords[-1])
