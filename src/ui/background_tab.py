@@ -55,20 +55,27 @@ class BackgroundTab(QWidget):
         
         # Панель с тепловой картой и проекциями
         plot_panel = QSplitter(Qt.Horizontal)
+        plot_panel.setChildrenCollapsible(False)  # Запрещаем сворачивание графиков
         
         # Левая панель с проекцией на ось Y
         self.y_proj_widget = QWidget()
+        self.y_proj_widget.setMinimumWidth(120)  # Устанавливаем минимальную ширину
         self.y_proj_layout = QVBoxLayout(self.y_proj_widget)
+        self.y_proj_layout.setContentsMargins(0, 0, 0, 0)  # Убираем отступы
         self.y_proj_canvas = None
         
         # Центральная панель с тепловой картой
         self.heatmap_widget = QWidget()
+        self.heatmap_widget.setMinimumSize(300, 300)  # Устанавливаем минимальные размеры
         self.heatmap_layout = QVBoxLayout(self.heatmap_widget)
+        self.heatmap_layout.setContentsMargins(0, 0, 0, 0)  # Убираем отступы
         self.heatmap_canvas = None
         
         # Нижняя панель с проекцией на ось X
         self.x_proj_widget = QWidget()
+        self.x_proj_widget.setMinimumHeight(120)  # Устанавливаем минимальную высоту
         self.x_proj_layout = QVBoxLayout(self.x_proj_widget)
+        self.x_proj_layout.setContentsMargins(0, 0, 0, 0)  # Убираем отступы
         self.x_proj_canvas = None
         
         # Добавляем виджеты в панель с графиками

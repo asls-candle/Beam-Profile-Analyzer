@@ -29,7 +29,7 @@ class CameraTab(QWidget):
         
         # Соединяем сигналы
         self.connect_signals()
-        
+
     def init_ui(self):
         """
         Инициализирует пользовательский интерфейс вкладки
