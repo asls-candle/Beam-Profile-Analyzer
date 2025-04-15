@@ -42,10 +42,20 @@ class PlotManager:
         fig.subplots_adjust(left=0.15, right=0.85, bottom=0.15, top=0.9)
         ax = fig.add_subplot(111)
         
-        # Строим тепловую карту
-        im = ax.imshow(data, cmap=self.colormap, origin='lower', 
-                       extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
-                       aspect='auto')  # Автоматическое соотношение сторон
+        # Уменьшаем разрешение тепловой карты для производительности
+        if data.shape[0] > 300 or data.shape[1] > 300:
+            step_y = max(1, data.shape[0] // 300)
+            step_x = max(1, data.shape[1] // 300)
+            data_downsampled = data[::step_y, ::step_x]
+            x = x[::step_x]
+            y = y[::step_y]
+            im = ax.imshow(data_downsampled, cmap=self.colormap, origin='lower',
+                           extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+                           aspect='auto', interpolation='bilinear')
+        else:
+            im = ax.imshow(data, cmap=self.colormap, origin='lower',
+                           extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+                           aspect='auto', interpolation='bilinear')
         
         # Добавляем заголовок и подписи осей
         ax.set_title("Профиль пучка", fontsize=10)

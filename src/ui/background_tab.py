@@ -13,11 +13,12 @@ class BackgroundTab(QWidget):
         super().__init__()
         
         self.main_window = main_window
+        self.last_data_hash = None  # Для отслеживания изменений
         
-        # Таймер для обновления UI
+        # Таймер для обновления UI с большим интервалом
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_tab)
-        self.update_timer.start(500)  # Обновление каждые 500 мс
+        self.update_timer.start(1000)  # Обновление каждую секунду
         
         # Инициализация UI
         self.init_ui()
@@ -153,7 +154,7 @@ class BackgroundTab(QWidget):
             
     def update_plots(self):
         """
-        Обновляет все графики
+        Обновляет все графики только если данные изменились
         """
         # Получаем текущие данные
         data = self.main_window.get_current_data()
@@ -162,7 +163,14 @@ class BackgroundTab(QWidget):
         # Если нет данных фона или информации о камере
         if data["background"] is None or camera_info is None:
             return
-            
+        
+        # Проверяем изменились ли данные
+        current_hash = hash(str(data["background"].data.tobytes()))
+        if self.last_data_hash == current_hash:
+            return  # Данные не изменились, выходим
+        
+        self.last_data_hash = current_hash
+        
         # Получаем информацию о камере
         pixel_size_x = camera_info.get("pixel_size_x", 1)
         pixel_size_y = camera_info.get("pixel_size_y", 1)

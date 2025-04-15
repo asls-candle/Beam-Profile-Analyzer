@@ -82,9 +82,20 @@ class MainWindow(QMainWindow):
         Args:
             index: Индекс новой вкладки
         """
-        # Обновляем активную вкладку
+        # Обновляем только активную вкладку
         active_tab = self.tabs.widget(index)
         active_tab.update_tab()
+        
+        # Останавливаем таймеры обновления в неактивных вкладках
+        for i in range(self.tabs.count()):
+            if i != index:
+                tab = self.tabs.widget(i)
+                if hasattr(tab, 'update_timer'):
+                    tab.update_timer.stop()
+        
+        # Запускаем таймер обновления только активной вкладки
+        if hasattr(active_tab, 'update_timer'):
+            active_tab.update_timer.start(1000)  # Увеличиваем интервал до 1 секунды
         
     def switch_mode(self, mode):
         """
@@ -274,59 +285,86 @@ class MainWindow(QMainWindow):
         Returns:
             bool: True если импорт успешен, иначе False
         """
-        # Импортируем данные
-        data = DataImporter.import_data(filepath)
+        try:
+            # Останавливаем таймеры обновления во всех вкладках
+            if hasattr(self, 'camera_tab') and self.camera_tab:
+                self.camera_tab.update_timer.stop()
+            if hasattr(self, 'background_tab') and self.background_tab:
+                self.background_tab.update_timer.stop()
+            if hasattr(self, 'difference_tab') and self.difference_tab:
+                self.difference_tab.update_timer.stop()
+            
+            # Импортируем данные
+            data = DataImporter.import_data(filepath)
+            
+            if data is None:
+                return False
+            
+            # Переключаемся в режим чтения файла
+            self.current_mode = "file"
+            
+            # Инициализируем file_data с базовой структурой во избежание KeyError
+            self.file_data = {
+                "shot": None,
+                "background": None,
+                "difference": None,
+                "current_frame": None,
+                "raw_shot": None,
+                "raw_background": None,
+                "resolution": (0, 0),
+                "pixel_size_x": 1.0,
+                "pixel_size_y": 1.0,
+                "camera_name": "Неизвестная камера",
+                "centroid": (0, 0),
+                "rms": (0, 0),
+                "filepath": filepath
+            }
+            
+            # Обновляем данные из импортированного словаря
+            self.file_data.update(data)
+            
+            # Вычисляем центроид и RMS, если они не были вычислены при импорте
+            if "shot" in data and data["shot"] is not None and "centroid" not in data:
+                pixel_size_x = self.file_data.get("pixel_size_x", 1)
+                pixel_size_y = self.file_data.get("pixel_size_y", 1)
+                
+                self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
+                    self.file_data["shot"],
+                    pixel_size_x,
+                    pixel_size_y
+                )
+                
+                self.file_data["rms"] = self.image_analyzer.calculate_rms(
+                    self.file_data["shot"],
+                    pixel_size_x,
+                    pixel_size_y
+                )
+            
+            # Обновляем все вкладки
+            self.camera_tab.update_tab()
+            self.background_tab.update_tab()
+            self.difference_tab.update_tab()
+            
+            # Запускаем таймеры обновления
+            if hasattr(self, 'camera_tab') and self.camera_tab:
+                self.camera_tab.update_timer.start(500)
+            if hasattr(self, 'background_tab') and self.background_tab:
+                self.background_tab.update_timer.start(500)
+            if hasattr(self, 'difference_tab') and self.difference_tab:
+                self.difference_tab.update_timer.start(500)
+            
+            return True
         
-        if data is None:
-            QMessageBox.warning(self, "Предупреждение", "Ошибка при импорте данных")
+        except Exception as e:
+            # В случае ошибки также восстанавливаем таймеры
+            if hasattr(self, 'camera_tab') and self.camera_tab:
+                self.camera_tab.update_timer.start(500)
+            if hasattr(self, 'background_tab') and self.background_tab:
+                self.background_tab.update_timer.start(500)
+            if hasattr(self, 'difference_tab') and self.difference_tab:
+                self.difference_tab.update_timer.start(500)
+            
             return False
-            
-        # Переключаемся в режим чтения файла
-        self.current_mode = "file"
-        
-        # Инициализируем file_data с базовой структурой во избежание KeyError
-        self.file_data = {
-            "shot": None,
-            "background": None,
-            "difference": None,
-            "current_frame": None,
-            "raw_shot": None,
-            "raw_background": None,
-            "resolution": (0, 0),
-            "pixel_size_x": 1.0,
-            "pixel_size_y": 1.0,
-            "camera_name": "Неизвестная камера",
-            "centroid": (0, 0),
-            "rms": (0, 0),
-            "filepath": filepath
-        }
-        
-        # Обновляем данные из импортированного словаря
-        self.file_data.update(data)
-        
-        # Вычисляем центроид и RMS, если они не были вычислены при импорте
-        if "shot" in data and data["shot"] is not None and "centroid" not in data:
-            pixel_size_x = self.file_data.get("pixel_size_x", 1)
-            pixel_size_y = self.file_data.get("pixel_size_y", 1)
-            
-            self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
-                self.file_data["shot"],
-                pixel_size_x,
-                pixel_size_y
-            )
-            
-            self.file_data["rms"] = self.image_analyzer.calculate_rms(
-                self.file_data["shot"],
-                pixel_size_x,
-                pixel_size_y
-            )
-            
-        # Обновляем все вкладки
-        self.camera_tab.update_tab()
-        self.background_tab.update_tab()
-        self.difference_tab.update_tab()
-        
-        return True
         
     def open_file_dialog(self):
         """
