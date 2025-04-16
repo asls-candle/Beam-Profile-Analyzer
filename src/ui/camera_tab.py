@@ -276,6 +276,9 @@ class CameraTab(QWidget):
         # Обновление метки режима
         self.mode_status_label.setText(f"Режим: {'Камера' if is_camera_mode else 'Чтение файлов'}")
         
+        # Управление кнопкой "Открыть файл" - активна только в режиме чтения файла
+        self.open_file_btn.setEnabled(not is_camera_mode)
+        
         # В режиме камеры
         if is_camera_mode:
             # Доступность элементов управления камерой
