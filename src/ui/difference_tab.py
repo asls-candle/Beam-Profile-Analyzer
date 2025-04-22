@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QSplitter
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QSplitter, QGridLayout
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 
@@ -50,48 +50,52 @@ class DifferenceTab(QWidget):
         top_panel.addWidget(camera_info_panel)
         top_panel.addStretch(1)  # Растягиваем пустое пространство
         
-        # Центральная панель с графиками и данными
-        central_panel = QSplitter(Qt.Vertical)
+        # Центральный контейнер для графиков
+        central_widget = QWidget()
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Панель с тепловой картой и проекциями
-        plot_panel = QSplitter(Qt.Horizontal)
-        plot_panel.setChildrenCollapsible(False)  # Запрещаем сворачивание графиков
+        # Создаем сетку для графиков
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(0)
         
         # Левая панель с проекцией на ось Y
         self.y_proj_widget = QWidget()
-        self.y_proj_widget.setMinimumWidth(120)  # Устанавливаем минимальную ширину
+        self.y_proj_widget.setMinimumWidth(120)
         self.y_proj_layout = QVBoxLayout(self.y_proj_widget)
-        self.y_proj_layout.setContentsMargins(0, 0, 0, 0)  # Убираем отступы
+        self.y_proj_layout.setContentsMargins(0, 0, 0, 0)
         self.y_proj_canvas = None
         
         # Центральная панель с тепловой картой
         self.heatmap_widget = QWidget()
-        self.heatmap_widget.setMinimumSize(300, 300)  # Устанавливаем минимальные размеры
+        self.heatmap_widget.setMinimumSize(300, 300)
         self.heatmap_layout = QVBoxLayout(self.heatmap_widget)
-        self.heatmap_layout.setContentsMargins(0, 0, 0, 0)  # Убираем отступы
+        self.heatmap_layout.setContentsMargins(0, 0, 0, 0)
         self.heatmap_canvas = None
         
         # Нижняя панель с проекцией на ось X
         self.x_proj_widget = QWidget()
-        self.x_proj_widget.setMinimumHeight(120)  # Устанавливаем минимальную высоту
+        self.x_proj_widget.setMinimumHeight(120)
         self.x_proj_layout = QVBoxLayout(self.x_proj_widget)
-        self.x_proj_layout.setContentsMargins(0, 0, 0, 0)  # Убираем отступы
+        self.x_proj_layout.setContentsMargins(0, 0, 0, 0)
         self.x_proj_canvas = None
         
-        # Добавляем виджеты в панель с графиками
-        plot_panel.addWidget(self.y_proj_widget)
-        plot_panel.addWidget(self.heatmap_widget)
-        
-        # Формируем панель с проекцией X под тепловой картой
-        bottom_panel = QWidget()
-        bottom_layout = QHBoxLayout(bottom_panel)
-        
-        # Пустой виджет для выравнивания с панелью Y
+        # Пустой виджет для нижнего левого угла сетки
         empty_widget = QWidget()
-        empty_widget.setFixedWidth(self.y_proj_widget.sizeHint().width())
         
-        bottom_layout.addWidget(empty_widget)
-        bottom_layout.addWidget(self.x_proj_widget)
+        # Размещаем виджеты в сетке
+        grid_layout.addWidget(self.y_proj_widget, 0, 0)
+        grid_layout.addWidget(self.heatmap_widget, 0, 1)
+        grid_layout.addWidget(empty_widget, 1, 0)
+        grid_layout.addWidget(self.x_proj_widget, 1, 1)
+        
+        # Устанавливаем соотношение растяжения столбцов и строк
+        grid_layout.setColumnStretch(0, 1)  # Y-проекция занимает 1 часть по ширине
+        grid_layout.setColumnStretch(1, 4)  # Тепловая карта занимает 4 части по ширине
+        grid_layout.setRowStretch(0, 4)     # Верхний ряд занимает 4 части по высоте
+        grid_layout.setRowStretch(1, 1)     # Нижний ряд занимает 1 часть по высоте
+        
+        central_layout.addLayout(grid_layout)
         
         # Панель с информацией о центроиде и RMS
         info_panel = QGroupBox("Информация о пучке (разница)")
@@ -117,18 +121,10 @@ class DifferenceTab(QWidget):
         info_layout.addWidget(self.rms_x_label)
         info_layout.addWidget(self.rms_y_label)
         
-        # Добавляем все в центральную панель
-        central_panel.addWidget(plot_panel)
-        central_panel.addWidget(bottom_panel)
-        central_panel.addWidget(info_panel)
-        
-        # Устанавливаем размеры сплиттеров
-        central_panel.setSizes([600, 200, 100])
-        plot_panel.setSizes([150, 600])
-        
         # Добавляем все в главный макет
         main_layout.addLayout(top_panel)
-        main_layout.addWidget(central_panel, 1)
+        main_layout.addWidget(central_widget, 1)
+        main_layout.addWidget(info_panel)
         
         self.setLayout(main_layout)
         
