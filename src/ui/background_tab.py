@@ -212,7 +212,7 @@ class BackgroundTab(QWidget):
         ax_x_proj.set_xlim(ax_heatmap.get_xlim())
         
         # Убираем пустое место
-        fig.tight_layout()
+        fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1, wspace=0.3, hspace=0.3)
         
         # Очищаем текущий холст
         if self.plot_canvas is not None:

@@ -4,6 +4,8 @@ from PyQt5.QtGui import QFont
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np
+from matplotlib.gridspec import GridSpec
+from matplotlib.figure import Figure
 
 class DifferenceTab(QWidget):
     """
@@ -50,52 +52,12 @@ class DifferenceTab(QWidget):
         top_panel.addWidget(camera_info_panel)
         top_panel.addStretch(1)  # Растягиваем пустое пространство
         
-        # Центральный контейнер для графиков
-        central_widget = QWidget()
-        central_layout = QVBoxLayout(central_widget)
-        central_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Создаем сетку для графиков
-        grid_layout = QGridLayout()
-        grid_layout.setSpacing(0)
-        
-        # Левая панель с проекцией на ось Y
-        self.y_proj_widget = QWidget()
-        self.y_proj_widget.setMinimumWidth(120)
-        self.y_proj_layout = QVBoxLayout(self.y_proj_widget)
-        self.y_proj_layout.setContentsMargins(0, 0, 0, 0)
-        self.y_proj_canvas = None
-        
-        # Центральная панель с тепловой картой
-        self.heatmap_widget = QWidget()
-        self.heatmap_widget.setMinimumSize(300, 300)
-        self.heatmap_layout = QVBoxLayout(self.heatmap_widget)
-        self.heatmap_layout.setContentsMargins(0, 0, 0, 0)
-        self.heatmap_canvas = None
-        
-        # Нижняя панель с проекцией на ось X
-        self.x_proj_widget = QWidget()
-        self.x_proj_widget.setMinimumHeight(120)
-        self.x_proj_layout = QVBoxLayout(self.x_proj_widget)
-        self.x_proj_layout.setContentsMargins(0, 0, 0, 0)
-        self.x_proj_canvas = None
-        
-        # Пустой виджет для нижнего левого угла сетки
-        empty_widget = QWidget()
-        
-        # Размещаем виджеты в сетке
-        grid_layout.addWidget(self.y_proj_widget, 0, 0)
-        grid_layout.addWidget(self.heatmap_widget, 0, 1)
-        grid_layout.addWidget(empty_widget, 1, 0)
-        grid_layout.addWidget(self.x_proj_widget, 1, 1)
-        
-        # Устанавливаем соотношение растяжения столбцов и строк
-        grid_layout.setColumnStretch(0, 1)  # Y-проекция занимает 1 часть по ширине
-        grid_layout.setColumnStretch(1, 4)  # Тепловая карта занимает 4 части по ширине
-        grid_layout.setRowStretch(0, 4)     # Верхний ряд занимает 4 части по высоте
-        grid_layout.setRowStretch(1, 1)     # Нижний ряд занимает 1 часть по высоте
-        
-        central_layout.addLayout(grid_layout)
+        # Центральный контейнер для графиков - один виджет вместо трех
+        self.plot_widget = QWidget()
+        self.plot_widget.setMinimumSize(400, 400)
+        self.plot_layout = QVBoxLayout(self.plot_widget)
+        self.plot_layout.setContentsMargins(0, 0, 0, 0)
+        self.plot_canvas = None
         
         # Панель с информацией о центроиде и RMS
         info_panel = QGroupBox("Информация о пучке (разница)")
@@ -123,7 +85,7 @@ class DifferenceTab(QWidget):
         
         # Добавляем все в главный макет
         main_layout.addLayout(top_panel)
-        main_layout.addWidget(central_widget, 1)
+        main_layout.addWidget(self.plot_widget, 1)
         main_layout.addWidget(info_panel)
         
         self.setLayout(main_layout)
@@ -163,18 +125,47 @@ class DifferenceTab(QWidget):
         pixel_size_x = camera_info.get("pixel_size_x", 1)
         pixel_size_y = camera_info.get("pixel_size_y", 1)
         
-        # Тепловая карта разницы
-        heatmap_fig = self.main_window.plot_manager.create_heatmap_figure(
-            data["difference"],
-            pixel_size_x,
-            pixel_size_y
-        )
+        # Создаем новую фигуру с тремя областями
+        fig = Figure(figsize=(10, 8))
         
-        # Проекции разницы
+        # Изменяем GridSpec для добавления места под colorbar
+        gs = GridSpec(2, 3, width_ratios=[1, 4, 0.3], height_ratios=[4, 1], figure=fig)
+        
+        # Область для проекции Y (слева)
+        ax_y_proj = fig.add_subplot(gs[0, 0])
+        # Область для тепловой карты (справа вверху)
+        ax_heatmap = fig.add_subplot(gs[0, 1])
+        # Область для проекции X (справа внизу)
+        ax_x_proj = fig.add_subplot(gs[1, 1])
+        # Область для colorbar
+        cax = fig.add_subplot(gs[0, 2])
+        
+        # Получаем данные изображения
+        img_data = data["difference"].data
+        
+        # Вычисляем координаты в миллиметрах
+        height, width = img_data.shape
+        x_mm = np.arange(width) * pixel_size_x
+        y_mm = np.arange(height) * pixel_size_y
+        
+        # Тепловая карта
+        im = ax_heatmap.imshow(
+            img_data, 
+            extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+            origin='lower', 
+            aspect='auto',
+            cmap='jet'
+        )
+        ax_heatmap.set_xlabel('X (мм)')
+        ax_heatmap.set_ylabel('Y (мм)')
+        ax_heatmap.set_title('Профиль пучка')
+        
+        # Добавляем colorbar
+        fig.colorbar(im, cax=cax, label='Интенсивность')
+        
+        # Проекции
         x_coords, x_proj, y_coords, y_proj = self.main_window.image_analyzer.calculate_projections(
-            data["difference"],
-            pixel_size_x,
-            pixel_size_y
+            data["difference"], pixel_size_x, pixel_size_y
         )
         
         # Аппроксимация гауссианой
@@ -187,45 +178,52 @@ class DifferenceTab(QWidget):
             _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_coords, y_proj)
         else:
             gauss_y = None
-            
-        x_proj_fig, y_proj_fig = self.main_window.plot_manager.create_projection_figure(
-            x_coords, x_proj, y_coords, y_proj, gauss_x, gauss_y
-        )
         
-        # Очищаем текущие графики
-        if self.heatmap_canvas is not None:
-            self.heatmap_layout.removeWidget(self.heatmap_canvas)
-            self.heatmap_canvas.close()
-            
-        if self.x_proj_canvas is not None:
-            self.x_proj_layout.removeWidget(self.x_proj_canvas)
-            self.x_proj_canvas.close()
-            
-        if self.y_proj_canvas is not None:
-            self.y_proj_layout.removeWidget(self.y_proj_canvas)
-            self.y_proj_canvas.close()
-            
-        # Создаем новые canvas
-        self.heatmap_canvas = self.main_window.plot_manager.create_canvas_from_figure(heatmap_fig)
-        self.x_proj_canvas = self.main_window.plot_manager.create_canvas_from_figure(x_proj_fig)
-        self.y_proj_canvas = self.main_window.plot_manager.create_canvas_from_figure(y_proj_fig)
+        # Рисуем проекцию X
+        if x_coords is not None and x_proj is not None:
+            ax_x_proj.plot(x_coords, x_proj, 'b-', label='Данные')
+            if gauss_x is not None:
+                ax_x_proj.plot(x_coords, gauss_x, 'r--', label='Гаусс')
+                ax_x_proj.legend(loc='upper right')
+        ax_x_proj.set_xlabel('X (мм)')
+        ax_x_proj.set_ylabel('Интенсивность')
+        ax_x_proj.grid(True, linestyle='--', alpha=0.7)
         
-        # Добавляем canvas на макеты
-        self.heatmap_layout.addWidget(self.heatmap_canvas)
-        self.x_proj_layout.addWidget(self.x_proj_canvas)
-        self.y_proj_layout.addWidget(self.y_proj_canvas)
+        # Рисуем проекцию Y
+        if y_coords is not None and y_proj is not None:
+            ax_y_proj.plot(y_proj, y_coords, 'b-', label='Данные')
+            if gauss_y is not None:
+                ax_y_proj.plot(gauss_y, y_coords, 'r--', label='Гаусс')
+                ax_y_proj.legend(loc='upper right')
+        ax_y_proj.set_ylabel('Y (мм)')
+        ax_y_proj.set_xlabel('Интенсивность')
+        ax_y_proj.grid(True, linestyle='--', alpha=0.7)
+        
+        # Выравниваем оси
+        ax_y_proj.set_ylim(ax_heatmap.get_ylim())
+        ax_x_proj.set_xlim(ax_heatmap.get_xlim())
+        
+        # Убираем пустое место
+        fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1, wspace=0.3, hspace=0.3)
+        
+        # Очищаем текущий холст
+        if self.plot_canvas is not None:
+            self.plot_layout.removeWidget(self.plot_canvas)
+            self.plot_canvas.close()
+        
+        # Создаем новый холст
+        self.plot_canvas = FigureCanvasQTAgg(fig)
+        
+        # Добавляем холст на макет
+        self.plot_layout.addWidget(self.plot_canvas)
         
         # Вычисляем центроид и RMS разницы
         centroid_x, centroid_y = self.main_window.image_analyzer.calculate_centroid(
-            data["difference"],
-            pixel_size_x,
-            pixel_size_y
+            data["difference"], pixel_size_x, pixel_size_y
         )
         
         rms_x, rms_y = self.main_window.image_analyzer.calculate_rms(
-            data["difference"],
-            pixel_size_x,
-            pixel_size_y
+            data["difference"], pixel_size_x, pixel_size_y
         )
         
         # Обновляем информацию о центроиде и RMS
