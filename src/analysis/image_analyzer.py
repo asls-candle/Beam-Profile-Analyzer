@@ -82,7 +82,7 @@ class ImageAnalyzer:
     
     def calculate_centroid(self, image, pixel_size_x, pixel_size_y):
         """
-        Рассчитывает координаты центроида изображения
+        Рассчитывает координаты центроида изображения в центрированной системе координат
         
         Args:
             image: Двумерный массив значений светимости
@@ -90,7 +90,7 @@ class ImageAnalyzer:
             pixel_size_y: Размер пикселя по оси Y (мм)
             
         Returns:
-            (centroid_x, centroid_y): Координаты центроида (мм)
+            (centroid_x, centroid_y): Координаты центроида (мм) в центрированной системе координат
         """
         if image is None or image.size == 0:
             return 0, 0
@@ -113,19 +113,20 @@ class ImageAnalyzer:
         if x_sum == 0 or y_sum == 0:
             return 0, 0
         
-        # Вычисляем взвешенное среднее положение (центроид)
+        # Вычисляем взвешенное среднее положение (центроид) в пикселях
         centroid_x_px = np.sum(np.arange(x_size) * x_proj) / x_sum
         centroid_y_px = np.sum(np.arange(y_size) * y_proj) / y_sum
         
-        # Преобразование в милиметры
-        centroid_x = centroid_x_px * pixel_size_x
-        centroid_y = centroid_y_px * pixel_size_y
+        # Преобразование в милиметры и центрирование относительно середины изображения
+        centroid_x = (centroid_x_px - x_size / 2) * pixel_size_x
+        centroid_y = (centroid_y_px - y_size / 2) * pixel_size_y
         
         return centroid_x, centroid_y
     
     def calculate_rms(self, image, pixel_size_x, pixel_size_y):
         """
         Рассчитывает RMS (Root Mean Square) отклонения пучка по осям X и Y
+        в центрированной системе координат
         
         Args:
             image: Двумерный массив значений светимости
@@ -141,12 +142,8 @@ class ImageAnalyzer:
         # Применяем ROI если задан
         processed_image = self.apply_roi(image)
         
-        # Получаем центроид
-        centroid_x, centroid_y = self.calculate_centroid(processed_image, 1, 1)  # В пикселях
-        
-        # Создаем координатную сетку (в пикселях)
+        # Получаем центроид в пикселях относительно начала координат
         y_size, x_size = processed_image.shape
-        x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
         
         # Вычисляем суммы интенсивности по осям
         x_proj = np.sum(processed_image, axis=0)
@@ -159,9 +156,13 @@ class ImageAnalyzer:
         if x_sum == 0 or y_sum == 0:
             return 0, 0
         
+        # Вычисляем взвешенное среднее положение (центроид) в пикселях
+        centroid_x_px = np.sum(np.arange(x_size) * x_proj) / x_sum
+        centroid_y_px = np.sum(np.arange(y_size) * y_proj) / y_sum
+        
         # Вычисляем RMS
-        rms_x_px = np.sqrt(np.sum(x_proj * (np.arange(x_size) - centroid_x)**2) / x_sum)
-        rms_y_px = np.sqrt(np.sum(y_proj * (np.arange(y_size) - centroid_y)**2) / y_sum)
+        rms_x_px = np.sqrt(np.sum(x_proj * (np.arange(x_size) - centroid_x_px)**2) / x_sum)
+        rms_y_px = np.sqrt(np.sum(y_proj * (np.arange(y_size) - centroid_y_px)**2) / y_sum)
         
         # Преобразование в милиметры
         rms_x = rms_x_px * pixel_size_x
