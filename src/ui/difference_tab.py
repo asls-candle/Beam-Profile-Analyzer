@@ -129,7 +129,7 @@ class DifferenceTab(QWidget):
         fig = Figure(figsize=(10, 8))
         
         # Изменяем GridSpec для добавления места под colorbar
-        gs = GridSpec(2, 3, width_ratios=[1, 4, 0.3], height_ratios=[4, 1], figure=fig)
+        gs = GridSpec(2, 3, width_ratios=[0.5, 5, 0.3], height_ratios=[5, 0.8], figure=fig)
         
         # Область для проекции Y (слева)
         ax_y_proj = fig.add_subplot(gs[0, 0])
@@ -143,15 +143,15 @@ class DifferenceTab(QWidget):
         # Получаем данные изображения
         img_data = data["difference"].data
         
-        # Вычисляем координаты в миллиметрах
+        # Вычисляем координаты в миллиметрах (центрированные относительно нуля)
         height, width = img_data.shape
-        x_mm = np.arange(width) * pixel_size_x
-        y_mm = np.arange(height) * pixel_size_y
+        x_mm = (np.arange(width) - width / 2) * pixel_size_x
+        y_mm = (np.arange(height) - height / 2) * pixel_size_y
         
         # Тепловая карта
         im = ax_heatmap.imshow(
             img_data, 
-            extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+            extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
             origin='lower', 
             aspect='auto',
             cmap='jet'
@@ -163,38 +163,27 @@ class DifferenceTab(QWidget):
         # Добавляем colorbar
         fig.colorbar(im, cax=cax, label='Интенсивность')
         
-        # Проекции
-        x_coords, x_proj, y_coords, y_proj = self.main_window.image_analyzer.calculate_projections(
-            data["difference"], pixel_size_x, pixel_size_y
-        )
-        
-        # Аппроксимация гауссианой
-        if x_coords is not None and x_proj is not None:
-            _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_coords, x_proj)
-        else:
-            gauss_x = None
-            
-        if y_coords is not None and y_proj is not None:
-            _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_coords, y_proj)
-        else:
-            gauss_y = None
-        
+        # --- Исправление: используем центрированные координаты для проекций ---
+        x_proj = np.sum(img_data, axis=0)
+        y_proj = np.sum(img_data, axis=1)
+
+        _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_mm, x_proj)
+        _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_mm, y_proj)
+
         # Рисуем проекцию X
-        if x_coords is not None and x_proj is not None:
-            ax_x_proj.plot(x_coords, x_proj, 'b-', label='Данные')
-            if gauss_x is not None:
-                ax_x_proj.plot(x_coords, gauss_x, 'r--', label='Гаусс')
-                ax_x_proj.legend(loc='upper right')
+        ax_x_proj.plot(x_mm, x_proj, 'b-', label='Данные')
+        if gauss_x is not None:
+            ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
+            ax_x_proj.legend(loc='upper right')
         ax_x_proj.set_xlabel('X (мм)')
         ax_x_proj.set_ylabel('Интенсивность')
         ax_x_proj.grid(True, linestyle='--', alpha=0.7)
         
         # Рисуем проекцию Y
-        if y_coords is not None and y_proj is not None:
-            ax_y_proj.plot(y_proj, y_coords, 'b-', label='Данные')
-            if gauss_y is not None:
-                ax_y_proj.plot(gauss_y, y_coords, 'r--', label='Гаусс')
-                ax_y_proj.legend(loc='upper right')
+        ax_y_proj.plot(y_proj, y_mm, 'b-', label='Данные')
+        if gauss_y is not None:
+            ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
+            ax_y_proj.legend(loc='upper right')
         ax_y_proj.set_ylabel('Y (мм)')
         ax_y_proj.set_xlabel('Интенсивность')
         ax_y_proj.grid(True, linestyle='--', alpha=0.7)
