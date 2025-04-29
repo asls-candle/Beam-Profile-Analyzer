@@ -378,24 +378,22 @@ class CameraTab(QWidget):
         x_proj = np.sum(img_data, axis=0)
         y_proj = np.sum(img_data, axis=1)
         
-        # Аппроксимация гауссианой
-        _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_mm, x_proj)
-        _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_mm, y_proj)
+        # Аппроксимация гауссианой - отключена
+        # _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_mm, x_proj)
+        # _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_mm, y_proj)
         
         # Рисуем проекцию X
         ax_x_proj.plot(x_mm, x_proj, 'b-', label='Данные')
-        if gauss_x is not None:
-            ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
-            ax_x_proj.legend(loc='best')
+        # if gauss_x is not None:
+        #     ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
         ax_x_proj.set_xlabel('X (мм)')
         ax_x_proj.set_ylabel('Интенсивность')
         ax_x_proj.grid(True, linestyle='--', alpha=0.7)
         
         # Рисуем проекцию Y
         ax_y_proj.plot(y_proj, y_mm, 'b-', label='Данные')
-        if gauss_y is not None:
-            ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
-            ax_y_proj.legend(loc='best')
+        # if gauss_y is not None:
+        #     ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
         ax_y_proj.set_ylabel('Y (мм)')
         ax_y_proj.set_xlabel('Интенсивность')
         ax_y_proj.grid(True, linestyle='--', alpha=0.7)
