@@ -33,9 +33,9 @@ class PlotManager:
         # Получаем размеры изображения
         height, width = data.shape
         
-        # Создаем массивы координат в миллиметрах
-        x = np.arange(width) * pixel_size_x
-        y = np.arange(height) * pixel_size_y
+        # Создаем массивы координат в миллиметрах (центрированные относительно нуля)
+        x_mm = (np.arange(width) - width / 2) * pixel_size_x
+        y_mm = (np.arange(height) - height / 2) * pixel_size_y
         
         # Создаем фигуру с жестко заданными полями
         fig = Figure(figsize=(5, 5))
@@ -47,14 +47,14 @@ class PlotManager:
             step_y = max(1, data.shape[0] // 300)
             step_x = max(1, data.shape[1] // 300)
             data_downsampled = data[::step_y, ::step_x]
-            x = x[::step_x]
-            y = y[::step_y]
+            x_downsampled = x_mm[::step_x]
+            y_downsampled = y_mm[::step_y]
             im = ax.imshow(data_downsampled, cmap=self.colormap, origin='lower',
-                           extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+                           extent=[x_downsampled[0], x_downsampled[-1], y_downsampled[0], y_downsampled[-1]],
                            aspect='auto', interpolation='bilinear')
         else:
             im = ax.imshow(data, cmap=self.colormap, origin='lower',
-                           extent=[0, width * pixel_size_x, 0, height * pixel_size_y],
+                           extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
                            aspect='auto', interpolation='bilinear')
         
         # Добавляем заголовок и подписи осей

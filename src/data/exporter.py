@@ -135,15 +135,42 @@ class DataExporter:
                             os.path.join(folder_path, f"{name}.png")
                         )
                     else:
-                        # Если plot_manager не доступен, сохраняем с помощью OpenCV
-                        # Нормализуем изображение к формату 8-bit
-                        normalized = (data * 255).astype(np.uint8)
+                        # Если plot_manager не доступен, сохраняем с помощью matplotlib 
+                        # используя центрированную сетку координат
                         
-                        # Применяем цветовую карту
-                        colored = cv2.applyColorMap(normalized, cv2.COLORMAP_JET)
+                        # Получаем размеры изображения
+                        height, width = data.shape
+                        pixel_size_x = data_dict.get("pixel_size_x", 1)
+                        pixel_size_y = data_dict.get("pixel_size_y", 1)
                         
-                        # Сохраняем изображение
-                        cv2.imwrite(os.path.join(folder_path, f"{name}.png"), colored)
+                        # Создаем центрированные координаты
+                        x_mm = (np.arange(width) - width / 2) * pixel_size_x
+                        y_mm = (np.arange(height) - height / 2) * pixel_size_y
+                        
+                        # Создаем фигуру
+                        fig, ax = plt.subplots(figsize=(8, 6))
+                        
+                        # Отображаем тепловую карту с центрированными координатами
+                        im = ax.imshow(
+                            data, 
+                            extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
+                            origin='lower', 
+                            aspect='auto',
+                            cmap='jet'
+                        )
+                        
+                        # Добавляем заголовок и подписи осей
+                        ax.set_title('Профиль пучка')
+                        ax.set_xlabel('X (мм)')
+                        ax.set_ylabel('Y (мм)')
+                        
+                        # Добавляем цветовую шкалу
+                        plt.colorbar(im, label='Интенсивность')
+                        
+                        # Сохраняем фигуру
+                        plt.tight_layout()
+                        plt.savefig(os.path.join(folder_path, f"{name}.png"), dpi=300)
+                        plt.close(fig)
             
             return True
         except Exception as e:
