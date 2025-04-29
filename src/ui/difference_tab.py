@@ -174,7 +174,7 @@ class DifferenceTab(QWidget):
         ax_x_proj.plot(x_mm, x_proj, 'b-', label='Данные')
         if gauss_x is not None:
             ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
-            ax_x_proj.legend(loc='upper right')
+            ax_x_proj.legend(loc='best')
         ax_x_proj.set_xlabel('X (мм)')
         ax_x_proj.set_ylabel('Интенсивность')
         ax_x_proj.grid(True, linestyle='--', alpha=0.7)
@@ -183,7 +183,7 @@ class DifferenceTab(QWidget):
         ax_y_proj.plot(y_proj, y_mm, 'b-', label='Данные')
         if gauss_y is not None:
             ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
-            ax_y_proj.legend(loc='upper right')
+            ax_y_proj.legend(loc='best')
         ax_y_proj.set_ylabel('Y (мм)')
         ax_y_proj.set_xlabel('Интенсивность')
         ax_y_proj.grid(True, linestyle='--', alpha=0.7)

@@ -208,6 +208,23 @@ class MainWindow(QMainWindow):
             
             return self.camera_data
         else:
+            # Для режима "file" также обновляем центроид и RMS при каждом запросе данных
+            if self.file_data["current_frame"] is not None:
+                pixel_size_x = self.file_data.get("pixel_size_x", 1)
+                pixel_size_y = self.file_data.get("pixel_size_y", 1)
+                
+                self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
+                    self.file_data["current_frame"],
+                    pixel_size_x,
+                    pixel_size_y
+                )
+                
+                self.file_data["rms"] = self.image_analyzer.calculate_rms(
+                    self.file_data["current_frame"],
+                    pixel_size_x,
+                    pixel_size_y
+                )
+                
             return self.file_data
             
     def get_camera_info(self):
@@ -322,6 +339,10 @@ class MainWindow(QMainWindow):
             
             # Обновляем данные из импортированного словаря
             self.file_data.update(data)
+            
+            # Копируем shot в current_frame, так как вкладка camera использует ключ current_frame
+            if "shot" in data and data["shot"] is not None:
+                self.file_data["current_frame"] = data["shot"]
             
             # Вычисляем центроид и RMS, если они не были вычислены при импорте
             if "shot" in data and data["shot"] is not None and "centroid" not in data:
