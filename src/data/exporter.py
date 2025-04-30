@@ -5,7 +5,6 @@ import csv
 import datetime
 import cv2
 from matplotlib import pyplot as plt
-from PIL import Image, ImageDraw, ImageFont
 
 class DataExporter:
     """
@@ -96,18 +95,18 @@ class DataExporter:
         Returns:
             np.ndarray: RGB изображение с применённой цветовой картой
         """
-        normalized = (data - data.min()) / (data.max() - data.min()) if data.max() > data.min() else np.zeros_like(data)
-        
-        # Преобразуем в uint8 для OpenCV
+        # Нормализуем данные к диапазону [0, 1], затем к [0, 255]
+        if data.max() > data.min():
+            normalized = (data - data.min()) / (data.max() - data.min())
+        else:
+            normalized = np.zeros_like(data)
+            
         normalized_uint8 = (normalized * 255).astype(np.uint8)
         
         # Применяем цветовую карту jet
         colored = cv2.applyColorMap(normalized_uint8, cv2.COLORMAP_JET)
         
-        # Конвертируем из BGR в RGB (OpenCV использует BGR)
-        colored_rgb = cv2.cvtColor(colored, cv2.COLOR_BGR2RGB)
-        
-        return colored_rgb
+        return colored
             
     @staticmethod
     def export_png(folder_path, data_dict, plot_manager):
@@ -148,21 +147,18 @@ class DataExporter:
             
             for name, data in images_data:
                 if data is not None:
-                    # Всегда используем PIL для сохранения изображений
                     # Получаем размеры изображения
                     height, width = data.shape
                     
                     # Создаем цветное изображение из данных
                     colored_data = DataExporter.apply_colormap(data)
                     
-                    # Создаем изображение PIL с исходными размерами пикселей
-                    img = Image.fromarray(colored_data)
+                    # Переворачиваем изображение по вертикали для соответствия matplotlib (origin='lower')
+                    # в OpenCV flip с параметром 0 означает переворот по оси X (вертикальный)
+                    colored_data = cv2.flip(colored_data, 0)
                     
-                    # Переворачиваем изображение по вертикали для согласования с matplotlib (origin='lower')
-                    img = img.transpose(Image.FLIP_TOP_BOTTOM)
-                    
-                    # Сохраняем изображение без изменения пропорций
-                    img.save(os.path.join(folder_path, f"{name}.png"))
+                    # Сохраняем изображение с помощью OpenCV
+                    cv2.imwrite(os.path.join(folder_path, f"{name}.png"), colored_data)
                     
                     # Выводим размеры для диагностики
                     print(f"Экспортировано изображение {name}.png с размерами {width}x{height} пикселей")
