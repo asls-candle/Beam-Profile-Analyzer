@@ -192,9 +192,14 @@ class DataExporter:
             elif export_format.lower() == "csv":
                 return DataExporter.export_csv(filepath, data)
             elif export_format.lower() == "png":
-                # Создаем папку с датой и временем в названии
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                folder_name = f"{os.path.basename(filepath)}_{timestamp}"
+                # Берем базовое имя файла без расширения
+                base_name = os.path.basename(filepath)
+                # Удаляем расширение файла, если оно есть
+                base_name_without_ext = os.path.splitext(base_name)[0]
+                
+                # Создаем папку с датой и временем в названии, используя разделитель между датой и временем
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                folder_name = f"{base_name_without_ext}_{timestamp}"
                 folder_path = os.path.join(os.path.dirname(filepath), folder_name)
                 
                 return DataExporter.export_png(folder_path, data, plot_manager)
