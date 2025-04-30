@@ -5,6 +5,7 @@ import csv
 import datetime
 import cv2
 from matplotlib import pyplot as plt
+from PIL import Image, ImageDraw, ImageFont
 
 class DataExporter:
     """
@@ -83,6 +84,30 @@ class DataExporter:
         except Exception as e:
             print(f"Ошибка при экспорте CSV файла: {e}")
             return False
+    
+    @staticmethod
+    def apply_colormap(data):
+        """
+        Применяет цветовую карту jet к данным
+        
+        Args:
+            data: Двумерный массив значений светимости
+            
+        Returns:
+            np.ndarray: RGB изображение с применённой цветовой картой
+        """
+        normalized = (data - data.min()) / (data.max() - data.min()) if data.max() > data.min() else np.zeros_like(data)
+        
+        # Преобразуем в uint8 для OpenCV
+        normalized_uint8 = (normalized * 255).astype(np.uint8)
+        
+        # Применяем цветовую карту jet
+        colored = cv2.applyColorMap(normalized_uint8, cv2.COLORMAP_JET)
+        
+        # Конвертируем из BGR в RGB (OpenCV использует BGR)
+        colored_rgb = cv2.cvtColor(colored, cv2.COLOR_BGR2RGB)
+        
+        return colored_rgb
             
     @staticmethod
     def export_png(folder_path, data_dict, plot_manager):
@@ -123,54 +148,21 @@ class DataExporter:
             
             for name, data in images_data:
                 if data is not None:
-                    # Сохраняем тепловую карту
-                    if plot_manager:
-                        fig = plot_manager.create_heatmap_figure(
-                            data, 
-                            data_dict.get("pixel_size_x", 1), 
-                            data_dict.get("pixel_size_y", 1)
-                        )
-                        plot_manager.save_figure(
-                            fig, 
-                            os.path.join(folder_path, f"{name}.png")
-                        )
-                    else:
-                        # Если plot_manager не доступен, сохраняем с помощью matplotlib 
-                        # используя центрированную сетку координат
-                        
-                        # Получаем размеры изображения
-                        height, width = data.shape
-                        pixel_size_x = data_dict.get("pixel_size_x", 1)
-                        pixel_size_y = data_dict.get("pixel_size_y", 1)
-                        
-                        # Создаем центрированные координаты
-                        x_mm = (np.arange(width) - width / 2) * pixel_size_x
-                        y_mm = (np.arange(height) - height / 2) * pixel_size_y
-                        
-                        # Создаем фигуру
-                        fig, ax = plt.subplots(figsize=(8, 6))
-                        
-                        # Отображаем тепловую карту с центрированными координатами
-                        im = ax.imshow(
-                            data, 
-                            extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
-                            origin='lower', 
-                            aspect='auto',
-                            cmap='jet'
-                        )
-                        
-                        # Добавляем заголовок и подписи осей
-                        ax.set_title('Профиль пучка')
-                        ax.set_xlabel('X (мм)')
-                        ax.set_ylabel('Y (мм)')
-                        
-                        # Добавляем цветовую шкалу
-                        plt.colorbar(im, label='Интенсивность')
-                        
-                        # Сохраняем фигуру
-                        plt.tight_layout()
-                        plt.savefig(os.path.join(folder_path, f"{name}.png"), dpi=300)
-                        plt.close(fig)
+                    # Всегда используем PIL для сохранения изображений
+                    # Получаем размеры изображения
+                    height, width = data.shape
+                    
+                    # Создаем цветное изображение из данных
+                    colored_data = DataExporter.apply_colormap(data)
+                    
+                    # Создаем изображение PIL с исходными размерами пикселей
+                    img = Image.fromarray(colored_data)
+                    
+                    # Сохраняем изображение без изменения пропорций
+                    img.save(os.path.join(folder_path, f"{name}.png"))
+                    
+                    # Выводим размеры для диагностики
+                    print(f"Экспортировано изображение {name}.png с размерами {width}x{height} пикселей")
             
             return True
         except Exception as e:
