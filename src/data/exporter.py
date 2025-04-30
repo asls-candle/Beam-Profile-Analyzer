@@ -158,6 +158,9 @@ class DataExporter:
                     # Создаем изображение PIL с исходными размерами пикселей
                     img = Image.fromarray(colored_data)
                     
+                    # Переворачиваем изображение по вертикали для согласования с matplotlib (origin='lower')
+                    img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                    
                     # Сохраняем изображение без изменения пропорций
                     img.save(os.path.join(folder_path, f"{name}.png"))
                     
