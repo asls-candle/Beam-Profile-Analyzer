@@ -1,13 +1,15 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                            QPushButton, QComboBox, QRadioButton, QButtonGroup,
                            QSpinBox, QGroupBox, QSplitter, QFrame, QMessageBox, QGridLayout)
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QFont
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.figure import Figure
+
+from src.ui.constants import TOP_PANEL_HEIGHT, BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT
 
 class CameraTab(QWidget):
     """
@@ -41,10 +43,16 @@ class CameraTab(QWidget):
         
         # Верхняя панель (режим работы, управление камерой, фоном и т.д.)
         top_panel = QHBoxLayout()
+        top_panel.setSpacing(10)  # Увеличиваем расстояние между элементами
+        top_panel_widget = QWidget()
+        top_panel_widget.setLayout(top_panel)
+        top_panel_widget.setFixedHeight(TOP_PANEL_HEIGHT)
         
         # Панель выбора режима
         mode_panel = QGroupBox("Режим работы")
+        mode_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         mode_layout = QVBoxLayout(mode_panel)
+        mode_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Радиокнопки выбора режима
         self.camera_radio = QRadioButton("Камера")
@@ -57,6 +65,9 @@ class CameraTab(QWidget):
         
         # Кнопка открытия файла
         self.open_file_btn = QPushButton("Открыть файл")
+        self.open_file_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.open_file_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.open_file_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
         # Добавляем в макет панели режима
         mode_layout.addWidget(self.camera_radio)
@@ -65,7 +76,9 @@ class CameraTab(QWidget):
         
         # Панель управления камерой
         camera_panel = QGroupBox("Управление камерой")
+        camera_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         camera_layout = QVBoxLayout(camera_panel)
+        camera_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Выпадающий список камер
         self.camera_label = QLabel("Камера:")
@@ -75,7 +88,14 @@ class CameraTab(QWidget):
         
         # Кнопки управления камерой
         self.launch_camera_btn = QPushButton("Launch the camera")
+        self.launch_camera_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.launch_camera_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.launch_camera_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
+        
         self.stop_camera_btn = QPushButton("Завершить работу с камерой")
+        self.stop_camera_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.stop_camera_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.stop_camera_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
         # Добавляем в макет панели камеры
         camera_layout.addWidget(self.camera_label)
@@ -85,7 +105,9 @@ class CameraTab(QWidget):
         
         # Панель информации о камере
         camera_info_panel = QGroupBox("Информация о камере")
+        camera_info_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         camera_info_layout = QVBoxLayout(camera_info_panel)
+        camera_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Метки с информацией
         self.camera_name_label = QLabel("Название: -")
@@ -99,7 +121,9 @@ class CameraTab(QWidget):
         
         # Панель управления фоном
         background_panel = QGroupBox("Сбор фона")
+        background_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         background_layout = QVBoxLayout(background_panel)
+        background_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Количество кадров для фона
         bg_frames_layout = QHBoxLayout()
@@ -111,7 +135,14 @@ class CameraTab(QWidget):
         
         # Кнопки управления сбором фона
         self.get_background_btn = QPushButton("Get background")
+        self.get_background_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.get_background_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.get_background_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
+        
         self.stop_bg_collection_btn = QPushButton("Stop")
+        self.stop_bg_collection_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.stop_bg_collection_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.stop_bg_collection_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
         # Добавляем в макет панели фона
         background_layout.addLayout(bg_frames_layout)
@@ -120,12 +151,25 @@ class CameraTab(QWidget):
         
         # Панель управления съемкой
         capture_panel = QGroupBox("Управление съемкой")
+        capture_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         capture_layout = QVBoxLayout(capture_panel)
+        capture_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Кнопки управления съемкой
         self.start_capture_btn = QPushButton("Start")
+        self.start_capture_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.start_capture_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.start_capture_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
+        
         self.stop_capture_btn = QPushButton("Stop")
+        self.stop_capture_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.stop_capture_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.stop_capture_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
+        
         self.export_data_btn = QPushButton("Export Data")
+        self.export_data_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
+        self.export_data_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
+        self.export_data_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
         # Добавляем в макет панели съемки
         capture_layout.addWidget(self.start_capture_btn)
@@ -134,7 +178,9 @@ class CameraTab(QWidget):
         
         # Панель состояния
         status_panel = QGroupBox("Статус")
+        status_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         status_layout = QVBoxLayout(status_panel)
+        status_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Метка с текущим режимом
         self.mode_status_label = QLabel("Режим: Камера")
@@ -146,13 +192,13 @@ class CameraTab(QWidget):
         status_layout.addWidget(self.camera_status_label)
         status_layout.addWidget(self.capture_status_label)
         
-        # Добавляем все панели в верхнюю панель
-        top_panel.addWidget(mode_panel)
-        top_panel.addWidget(camera_panel)
-        top_panel.addWidget(camera_info_panel)
-        top_panel.addWidget(background_panel)
-        top_panel.addWidget(capture_panel)
-        top_panel.addWidget(status_panel)
+        # Добавляем все панели в верхнюю панель с равным растяжением
+        top_panel.addWidget(mode_panel, 1)
+        top_panel.addWidget(camera_panel, 1)
+        top_panel.addWidget(camera_info_panel, 1)
+        top_panel.addWidget(background_panel, 1)
+        top_panel.addWidget(capture_panel, 1)
+        top_panel.addWidget(status_panel, 1)
         
         # Центральный контейнер для графиков - один виджет вместо трех
         self.plot_widget = QWidget()
@@ -186,7 +232,7 @@ class CameraTab(QWidget):
         info_layout.addWidget(self.rms_y_label)
         
         # Добавляем все в главный макет
-        main_layout.addLayout(top_panel)
+        main_layout.addWidget(top_panel_widget)
         main_layout.addWidget(self.plot_widget, 1)
         main_layout.addWidget(info_panel)
         

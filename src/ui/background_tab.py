@@ -7,6 +7,8 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.figure import Figure
 
+from src.ui.constants import TOP_PANEL_HEIGHT
+
 class BackgroundTab(QWidget):
     """
     Вкладка для отображения фонового изображения
@@ -34,10 +36,16 @@ class BackgroundTab(QWidget):
         
         # Верхняя панель с информацией о камере
         top_panel = QHBoxLayout()
+        top_panel.setSpacing(10)  # Увеличиваем расстояние между элементами
+        top_panel_widget = QWidget()
+        top_panel_widget.setLayout(top_panel)
+        top_panel_widget.setFixedHeight(TOP_PANEL_HEIGHT)
         
         # Панель информации о камере
         camera_info_panel = QGroupBox("Информация о камере")
+        camera_info_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
         camera_info_layout = QVBoxLayout(camera_info_panel)
+        camera_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
         # Метки с информацией
         self.camera_name_label = QLabel("Название: -")
@@ -51,7 +59,14 @@ class BackgroundTab(QWidget):
         
         # Добавляем в верхнюю панель
         top_panel.addWidget(camera_info_panel)
-        top_panel.addStretch(1)  # Растягиваем пустое пространство
+        
+        # Создаем невидимые пустые панели для имитации остальных панелей в camera_tab
+        for i in range(5):  # 5 других панелей в camera_tab
+            empty_panel = QGroupBox()
+            empty_panel.setMinimumWidth(150)
+            empty_panel.setStyleSheet("border: none; background-color: transparent;")
+            empty_layout = QVBoxLayout(empty_panel)
+            top_panel.addWidget(empty_panel)
         
         # Центральный контейнер для графиков - один виджет вместо трех
         self.plot_widget = QWidget()
@@ -85,7 +100,7 @@ class BackgroundTab(QWidget):
         info_layout.addWidget(self.rms_y_label)
         
         # Добавляем все в главный макет
-        main_layout.addLayout(top_panel)
+        main_layout.addWidget(top_panel_widget)
         main_layout.addWidget(self.plot_widget, 1)
         main_layout.addWidget(info_panel)
         
