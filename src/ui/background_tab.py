@@ -57,16 +57,45 @@ class BackgroundTab(QWidget):
         camera_info_layout.addWidget(self.camera_resolution_label)
         camera_info_layout.addWidget(self.camera_pixel_size_label)
         
-        # Добавляем в верхнюю панель
+        # Панель с информацией о центроиде и RMS
+        beam_info_panel = QGroupBox("Информация о фоне")
+        beam_info_panel.setMinimumWidth(140)  # Устанавливаем минимальную ширину
+        beam_info_layout = QVBoxLayout(beam_info_panel)
+        beam_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        
+        # Метки с информацией
+        self.centroid_x_label = QLabel("Центроид X: -")
+        self.centroid_y_label = QLabel("Центроид Y: -")
+        self.rms_x_label = QLabel("RMS X: -")
+        self.rms_y_label = QLabel("RMS Y: -")
+        
+        # Уменьшаем размер шрифта для меток
+        font = QFont()
+        font.setPointSize(9)
+        self.centroid_x_label.setFont(font)
+        self.centroid_y_label.setFont(font)
+        self.rms_x_label.setFont(font)
+        self.rms_y_label.setFont(font)
+        
+        # Добавляем в макет панели информации
+        beam_info_layout.addWidget(self.centroid_x_label)
+        beam_info_layout.addWidget(self.centroid_y_label)
+        beam_info_layout.addWidget(self.rms_x_label)
+        beam_info_layout.addWidget(self.rms_y_label)
+        
+        # Добавляем панели в верхнюю панель
         top_panel.addWidget(camera_info_panel)
         
         # Создаем невидимые пустые панели для имитации остальных панелей в camera_tab
         for i in range(5):  # 5 других панелей в camera_tab
             empty_panel = QGroupBox()
-            empty_panel.setMinimumWidth(150)
+            empty_panel.setMinimumWidth(120)
             empty_panel.setStyleSheet("border: none; background-color: transparent;")
             empty_layout = QVBoxLayout(empty_panel)
             top_panel.addWidget(empty_panel)
+            
+        # Добавляем панель информации о пучке в конце
+        top_panel.addWidget(beam_info_panel)
         
         # Центральный контейнер для графиков - один виджет вместо трех
         self.plot_widget = QWidget()
@@ -75,34 +104,9 @@ class BackgroundTab(QWidget):
         self.plot_layout.setContentsMargins(0, 0, 0, 0)
         self.plot_canvas = None
         
-        # Панель с информацией о центроиде и RMS
-        info_panel = QGroupBox("Информация о фоне")
-        info_layout = QVBoxLayout(info_panel)
-        
-        # Метки с информацией
-        self.centroid_x_label = QLabel("Центроид X: -")
-        self.centroid_y_label = QLabel("Центроид Y: -")
-        self.rms_x_label = QLabel("RMS X: -")
-        self.rms_y_label = QLabel("RMS Y: -")
-        
-        # Размер шрифта
-        font = QFont()
-        font.setPointSize(12)
-        self.centroid_x_label.setFont(font)
-        self.centroid_y_label.setFont(font)
-        self.rms_x_label.setFont(font)
-        self.rms_y_label.setFont(font)
-        
-        # Добавляем в макет панели информации
-        info_layout.addWidget(self.centroid_x_label)
-        info_layout.addWidget(self.centroid_y_label)
-        info_layout.addWidget(self.rms_x_label)
-        info_layout.addWidget(self.rms_y_label)
-        
         # Добавляем все в главный макет
         main_layout.addWidget(top_panel_widget)
         main_layout.addWidget(self.plot_widget, 1)
-        main_layout.addWidget(info_panel)
         
         self.setLayout(main_layout)
         

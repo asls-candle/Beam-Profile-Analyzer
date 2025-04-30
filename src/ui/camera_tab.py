@@ -50,7 +50,7 @@ class CameraTab(QWidget):
         
         # Панель выбора режима
         mode_panel = QGroupBox("Режим работы")
-        mode_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        mode_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
         mode_layout = QVBoxLayout(mode_panel)
         mode_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
@@ -76,7 +76,7 @@ class CameraTab(QWidget):
         
         # Панель управления камерой
         camera_panel = QGroupBox("Управление камерой")
-        camera_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        camera_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
         camera_layout = QVBoxLayout(camera_panel)
         camera_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
@@ -105,7 +105,7 @@ class CameraTab(QWidget):
         
         # Панель информации о камере
         camera_info_panel = QGroupBox("Информация о камере")
-        camera_info_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        camera_info_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
         camera_info_layout = QVBoxLayout(camera_info_panel)
         camera_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
@@ -121,7 +121,7 @@ class CameraTab(QWidget):
         
         # Панель управления фоном
         background_panel = QGroupBox("Сбор фона")
-        background_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        background_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
         background_layout = QVBoxLayout(background_panel)
         background_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
@@ -151,7 +151,7 @@ class CameraTab(QWidget):
         
         # Панель управления съемкой
         capture_panel = QGroupBox("Управление съемкой")
-        capture_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        capture_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
         capture_layout = QVBoxLayout(capture_panel)
         capture_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
@@ -178,7 +178,7 @@ class CameraTab(QWidget):
         
         # Панель состояния
         status_panel = QGroupBox("Статус")
-        status_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        status_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
         status_layout = QVBoxLayout(status_panel)
         status_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
         
@@ -192,6 +192,32 @@ class CameraTab(QWidget):
         status_layout.addWidget(self.camera_status_label)
         status_layout.addWidget(self.capture_status_label)
         
+        # Панель с информацией о центроиде и RMS
+        beam_info_panel = QGroupBox("Информация о пучке")
+        beam_info_panel.setMinimumWidth(140)  # Увеличиваем минимальную ширину
+        beam_info_layout = QVBoxLayout(beam_info_panel)
+        beam_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        
+        # Метки с информацией
+        self.centroid_x_label = QLabel("Центроид X: -")
+        self.centroid_y_label = QLabel("Центроид Y: -")
+        self.rms_x_label = QLabel("RMS X: -")
+        self.rms_y_label = QLabel("RMS Y: -")
+        
+        # Уменьшаем размер шрифта для меток
+        font = QFont()
+        font.setPointSize(9)
+        self.centroid_x_label.setFont(font)
+        self.centroid_y_label.setFont(font)
+        self.rms_x_label.setFont(font)
+        self.rms_y_label.setFont(font)
+        
+        # Добавляем в макет панели информации
+        beam_info_layout.addWidget(self.centroid_x_label)
+        beam_info_layout.addWidget(self.centroid_y_label)
+        beam_info_layout.addWidget(self.rms_x_label)
+        beam_info_layout.addWidget(self.rms_y_label)
+        
         # Добавляем все панели в верхнюю панель с равным растяжением
         top_panel.addWidget(mode_panel, 1)
         top_panel.addWidget(camera_panel, 1)
@@ -199,6 +225,7 @@ class CameraTab(QWidget):
         top_panel.addWidget(background_panel, 1)
         top_panel.addWidget(capture_panel, 1)
         top_panel.addWidget(status_panel, 1)
+        top_panel.addWidget(beam_info_panel, 1)
         
         # Центральный контейнер для графиков - один виджет вместо трех
         self.plot_widget = QWidget()
@@ -207,34 +234,9 @@ class CameraTab(QWidget):
         self.plot_layout.setContentsMargins(0, 0, 0, 0)
         self.plot_canvas = None
         
-        # Панель с информацией о центроиде и RMS
-        info_panel = QGroupBox("Информация о пучке")
-        info_layout = QVBoxLayout(info_panel)
-        
-        # Метки с информацией
-        self.centroid_x_label = QLabel("Центроид X: -")
-        self.centroid_y_label = QLabel("Центроид Y: -")
-        self.rms_x_label = QLabel("RMS X: -")
-        self.rms_y_label = QLabel("RMS Y: -")
-        
-        # Размер шрифта
-        font = QFont()
-        font.setPointSize(12)
-        self.centroid_x_label.setFont(font)
-        self.centroid_y_label.setFont(font)
-        self.rms_x_label.setFont(font)
-        self.rms_y_label.setFont(font)
-        
-        # Добавляем в макет панели информации
-        info_layout.addWidget(self.centroid_x_label)
-        info_layout.addWidget(self.centroid_y_label)
-        info_layout.addWidget(self.rms_x_label)
-        info_layout.addWidget(self.rms_y_label)
-        
         # Добавляем все в главный макет
         main_layout.addWidget(top_panel_widget)
         main_layout.addWidget(self.plot_widget, 1)
-        main_layout.addWidget(info_panel)
         
         self.setLayout(main_layout)
         
