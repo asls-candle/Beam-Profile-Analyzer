@@ -6,6 +6,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 from src.ui.constants import TOP_PANEL_HEIGHT
 
@@ -224,6 +225,9 @@ class BackgroundTab(QWidget):
         # Очищаем текущий холст
         if self.plot_canvas is not None:
             self.plot_layout.removeWidget(self.plot_canvas)
+            # Правильное освобождение ресурсов matplotlib
+            plt_figure = self.plot_canvas.figure
+            plt_figure.clear()
             self.plot_canvas.close()
         
         # Создаем новый холст

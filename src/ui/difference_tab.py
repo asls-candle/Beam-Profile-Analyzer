@@ -6,6 +6,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 from src.ui.constants import TOP_PANEL_HEIGHT
 
@@ -17,6 +18,9 @@ class DifferenceTab(QWidget):
         super().__init__()
         
         self.main_window = main_window
+        
+        # Для отслеживания изменений данных
+        self.last_data_hash = None
         
         # Таймер для обновления UI
         self.update_timer = QTimer()
@@ -139,6 +143,14 @@ class DifferenceTab(QWidget):
         # Если нет данных разницы или информации о камере
         if data["difference"] is None or camera_info is None:
             return
+        
+        # Проверяем изменились ли данные
+        if data["difference"] is not None:
+            current_hash = hash(str(data["difference"].data.tobytes()))
+            if self.last_data_hash == current_hash and self.plot_canvas is not None:
+                # Данные не изменились, выходим
+                return
+            self.last_data_hash = current_hash
             
         # Получаем информацию о камере
         pixel_size_x = camera_info.get("pixel_size_x", 1)
@@ -216,6 +228,9 @@ class DifferenceTab(QWidget):
         # Очищаем текущий холст
         if self.plot_canvas is not None:
             self.plot_layout.removeWidget(self.plot_canvas)
+            # Правильное освобождение ресурсов matplotlib
+            plt_figure = self.plot_canvas.figure
+            plt_figure.clear()
             self.plot_canvas.close()
         
         # Создаем новый холст
