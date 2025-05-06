@@ -208,23 +208,8 @@ class MainWindow(QMainWindow):
             
             return self.camera_data
         else:
-            # Для режима "file" также обновляем центроид и RMS при каждом запросе данных
-            if self.file_data["current_frame"] is not None:
-                pixel_size_x = self.file_data.get("pixel_size_x", 1)
-                pixel_size_y = self.file_data.get("pixel_size_y", 1)
-                
-                self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
-                    self.file_data["current_frame"],
-                    pixel_size_x,
-                    pixel_size_y
-                )
-                
-                self.file_data["rms"] = self.image_analyzer.calculate_rms(
-                    self.file_data["current_frame"],
-                    pixel_size_x,
-                    pixel_size_y
-                )
-                
+            # В режиме файла данные статичны, поэтому нет необходимости 
+            # повторно вычислять центроид и RMS
             return self.file_data
             
     def get_camera_info(self):
@@ -315,6 +300,7 @@ class MainWindow(QMainWindow):
             data = DataImporter.import_data(filepath)
             
             if data is None:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось импортировать файл: {filepath}")
                 return False
             
             # Переключаемся в режим чтения файла
@@ -344,22 +330,58 @@ class MainWindow(QMainWindow):
             if "shot" in data and data["shot"] is not None:
                 self.file_data["current_frame"] = data["shot"]
             
-            # Вычисляем центроид и RMS, если они не были вычислены при импорте
-            if "shot" in data and data["shot"] is not None and "centroid" not in data:
-                pixel_size_x = self.file_data.get("pixel_size_x", 1)
-                pixel_size_y = self.file_data.get("pixel_size_y", 1)
+            # Получаем размеры пикселя из данных
+            pixel_size_x = self.file_data.get("pixel_size_x", 1)
+            pixel_size_y = self.file_data.get("pixel_size_y", 1)
+            
+            try:
+                # Вычисляем центроид и RMS для основного изображения
+                if self.file_data["current_frame"] is not None:
+                    self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
+                        self.file_data["current_frame"],
+                        pixel_size_x,
+                        pixel_size_y
+                    )
+                    
+                    self.file_data["rms"] = self.image_analyzer.calculate_rms(
+                        self.file_data["current_frame"],
+                        pixel_size_x,
+                        pixel_size_y
+                    )
                 
-                self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
-                    self.file_data["shot"],
-                    pixel_size_x,
-                    pixel_size_y
-                )
+                # Вычисляем центроид и RMS для фонового изображения
+                if self.file_data["background"] is not None:
+                    self.file_data["background_centroid"] = self.image_analyzer.calculate_centroid(
+                        self.file_data["background"],
+                        pixel_size_x,
+                        pixel_size_y
+                    )
+                    
+                    self.file_data["background_rms"] = self.image_analyzer.calculate_rms(
+                        self.file_data["background"],
+                        pixel_size_x,
+                        pixel_size_y
+                    )
                 
-                self.file_data["rms"] = self.image_analyzer.calculate_rms(
-                    self.file_data["shot"],
-                    pixel_size_x,
-                    pixel_size_y
-                )
+                # Вычисляем центроид и RMS для разницы изображений
+                if self.file_data["difference"] is not None:
+                    self.file_data["difference_centroid"] = self.image_analyzer.calculate_centroid(
+                        self.file_data["difference"],
+                        pixel_size_x,
+                        pixel_size_y
+                    )
+                    
+                    self.file_data["difference_rms"] = self.image_analyzer.calculate_rms(
+                        self.file_data["difference"],
+                        pixel_size_x,
+                        pixel_size_y
+                    )
+            except Exception as e:
+                # Ошибка при вычислениях не должна прервать загрузку файла,
+                # но должна быть залогирована и показана пользователю
+                print(f"Ошибка при вычислении параметров: {e}")
+                QMessageBox.warning(self, "Предупреждение", 
+                                   f"Файл загружен, но не удалось вычислить параметры: {str(e)}")
             
             # Обновляем все вкладки
             self.camera_tab.update_tab()
@@ -384,6 +406,11 @@ class MainWindow(QMainWindow):
                 self.background_tab.update_timer.start(500)
             if hasattr(self, 'difference_tab') and self.difference_tab:
                 self.difference_tab.update_timer.start(500)
+            
+            # Показываем подробное сообщение об ошибке
+            error_message = f"Ошибка при импорте файла {filepath}:\n{str(e)}"
+            print(error_message)
+            QMessageBox.critical(self, "Ошибка импорта", error_message)
             
             return False
         

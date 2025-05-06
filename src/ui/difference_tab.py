@@ -239,14 +239,20 @@ class DifferenceTab(QWidget):
         # Добавляем холст на макет
         self.plot_layout.addWidget(self.plot_canvas)
         
-        # Вычисляем центроид и RMS разницы
-        centroid_x, centroid_y = self.main_window.image_analyzer.calculate_centroid(
-            data["difference"], pixel_size_x, pixel_size_y
-        )
-        
-        rms_x, rms_y = self.main_window.image_analyzer.calculate_rms(
-            data["difference"], pixel_size_x, pixel_size_y
-        )
+        # Вычисляем или берем предварительно рассчитанные центроид и RMS разницы
+        if self.main_window.current_mode == "file" and "difference_centroid" in self.main_window.file_data:
+            # Используем предварительно вычисленные значения
+            centroid_x, centroid_y = self.main_window.file_data["difference_centroid"]
+            rms_x, rms_y = self.main_window.file_data["difference_rms"]
+        else:
+            # Вычисляем на месте
+            centroid_x, centroid_y = self.main_window.image_analyzer.calculate_centroid(
+                data["difference"], pixel_size_x, pixel_size_y
+            )
+            
+            rms_x, rms_y = self.main_window.image_analyzer.calculate_rms(
+                data["difference"], pixel_size_x, pixel_size_y
+            )
         
         # Обновляем информацию о центроиде и RMS
         self.centroid_x_label.setText(f"Центроид X: {centroid_x:.6f} мм")

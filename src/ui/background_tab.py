@@ -236,14 +236,20 @@ class BackgroundTab(QWidget):
         # Добавляем холст на макет
         self.plot_layout.addWidget(self.plot_canvas)
         
-        # Вычисляем центроид и RMS фона
-        centroid_x, centroid_y = self.main_window.image_analyzer.calculate_centroid(
-            data["background"], pixel_size_x, pixel_size_y
-        )
-        
-        rms_x, rms_y = self.main_window.image_analyzer.calculate_rms(
-            data["background"], pixel_size_x, pixel_size_y
-        )
+        # Вычисляем или берем предварительно рассчитанные центроид и RMS фона
+        if self.main_window.current_mode == "file" and "background_centroid" in self.main_window.file_data:
+            # Используем предварительно вычисленные значения
+            centroid_x, centroid_y = self.main_window.file_data["background_centroid"]
+            rms_x, rms_y = self.main_window.file_data["background_rms"]
+        else:
+            # Вычисляем на месте
+            centroid_x, centroid_y = self.main_window.image_analyzer.calculate_centroid(
+                data["background"], pixel_size_x, pixel_size_y
+            )
+            
+            rms_x, rms_y = self.main_window.image_analyzer.calculate_rms(
+                data["background"], pixel_size_x, pixel_size_y
+            )
         
         # Обновляем информацию о центроиде и RMS
         self.centroid_x_label.setText(f"Центроид X: {centroid_x:.6f} мм")
