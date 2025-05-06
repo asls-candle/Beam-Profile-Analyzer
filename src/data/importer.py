@@ -12,36 +12,6 @@ class DataImporter:
     """
     
     @staticmethod
-    def import_npy(filepath):
-        """
-        Импортирует данные из NPY файла
-        
-        Args:
-            filepath: Путь к файлу
-            
-        Returns:
-            dict: Словарь с импортированными данными или None в случае ошибки
-        """
-        try:
-            logger.info(f"Начало импорта NPY файла: {filepath}")
-            # Загружаем данные
-            logger.debug(f"Загрузка данных из файла: {filepath}")
-            data = np.load(filepath, allow_pickle=True).item()
-            
-            # Проверяем, что это словарь
-            if not isinstance(data, dict):
-                print(f"Файл {filepath} не содержит словарь с данными")
-                logger.error(f"Файл {filepath} не содержит словарь с данными")
-                return None
-                
-            logger.info(f"Успешно импортирован NPY файл: {filepath}")
-            return data
-        except Exception as e:
-            print(f"Ошибка при импорте NPY файла: {e}")
-            logger.error(f"Ошибка при импорте NPY файла: {e}", exc_info=True)
-            return None
-            
-    @staticmethod
     def import_mat(filepath, background_filepath=None):
         """
         Импортирует данные из MAT файла
@@ -344,10 +314,7 @@ class DataImporter:
             _, ext = os.path.splitext(filepath)
             logger.debug(f"Определено расширение файла: {ext}")
             
-            if ext.lower() == ".npy":
-                logger.debug("Выбран импорт NPY файла")
-                return DataImporter.import_npy(filepath)
-            elif ext.lower() == ".mat":
+            if ext.lower() == ".mat":
                 logger.debug("Выбран импорт MAT файла")
                 return DataImporter.import_mat(filepath)
             else:

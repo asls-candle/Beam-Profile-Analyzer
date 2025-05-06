@@ -12,31 +12,6 @@ class DataExporter:
     """
     
     @staticmethod
-    def export_npy(filepath, data_dict):
-        """
-        Экспортирует данные в формате NPY
-        
-        Args:
-            filepath: Путь для сохранения файла
-            data_dict: Словарь с данными для экспорта
-            
-        Returns:
-            bool: True если экспорт успешен, иначе False
-        """
-        try:
-            # Убеждаемся, что все массивы numpy в словаре
-            for key, value in data_dict.items():
-                if isinstance(value, np.ndarray):
-                    data_dict[key] = value
-                    
-            # Сохраняем словарь
-            np.save(filepath, data_dict)
-            return True
-        except Exception as e:
-            print(f"Ошибка при экспорте NPY файла: {e}")
-            return False
-            
-    @staticmethod
     def export_csv(filepath, data_dict):
         """
         Экспортирует данные в формате CSV
@@ -169,14 +144,14 @@ class DataExporter:
             return False
             
     @staticmethod
-    def export_data(filepath, data, export_format="npy", plot_manager=None):
+    def export_data(filepath, data, export_format="csv", plot_manager=None):
         """
         Экспортирует данные в указанном формате
         
         Args:
             filepath: Путь для сохранения файла/директории
             data: Словарь с данными для экспорта
-            export_format: Формат экспорта ("npy", "csv", "png")
+            export_format: Формат экспорта ("csv", "png")
             plot_manager: Экземпляр PlotManager для построения графиков (нужен для PNG)
             
         Returns:
@@ -187,9 +162,7 @@ class DataExporter:
             data["date"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             # Экспортируем в зависимости от формата
-            if export_format.lower() == "npy":
-                return DataExporter.export_npy(filepath, data)
-            elif export_format.lower() == "csv":
+            if export_format.lower() == "csv":
                 return DataExporter.export_csv(filepath, data)
             elif export_format.lower() == "png":
                 # Берем базовое имя файла без расширения

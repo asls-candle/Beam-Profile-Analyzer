@@ -247,13 +247,13 @@ class MainWindow(QMainWindow):
                 }
             return None
             
-    def export_data(self, filepath, export_format="npy"):
+    def export_data(self, filepath, export_format="csv"):
         """
         Экспортирует данные в указанном формате
         
         Args:
             filepath: Путь для сохранения файла/директории
-            export_format: Формат экспорта ("npy", "csv", "png")
+            export_format: Формат экспорта ("csv", "png")
             
         Returns:
             bool: True если экспорт успешен, иначе False
@@ -398,7 +398,7 @@ class MainWindow(QMainWindow):
             self,
             "Открыть файл",
             "",
-            "Файлы данных (*.npy *.mat);;Все файлы (*)"
+            "Файлы данных (*.mat);;Все файлы (*)"
         )
         
         if filepath:
@@ -406,19 +406,18 @@ class MainWindow(QMainWindow):
             
         return False
         
-    def save_file_dialog(self, default_format="npy"):
+    def save_file_dialog(self, default_format="csv"):
         """
         Открывает диалог сохранения файла для экспорта
         
         Args:
-            default_format: Формат экспорта по умолчанию ("npy", "csv", "png")
+            default_format: Формат экспорта по умолчанию ("csv", "png")
             
         Returns:
             bool: True если данные успешно экспортированы, иначе False
         """
         # Форматы и фильтры
         formats = {
-            "npy": "Файлы NumPy (*.npy)",
             "csv": "CSV файлы (*.csv)",
             "png": "PNG изображения (папка)"
         }
@@ -427,7 +426,7 @@ class MainWindow(QMainWindow):
         filter_str = ";;".join(formats.values())
         
         # Выбираем формат по умолчанию
-        default_filter = formats.get(default_format, formats["npy"])
+        default_filter = formats.get(default_format, formats["csv"])
         
         # Открываем диалог сохранения
         filepath, selected_filter = QFileDialog.getSaveFileName(
