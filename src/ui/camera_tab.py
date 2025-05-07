@@ -443,7 +443,7 @@ class CameraTab(QWidget):
         # _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_mm, y_proj)
         
         # Рисуем проекцию X
-        ax_x_proj.plot(x_mm, x_proj, 'b-', label='Данные')
+        ax_x_proj.plot(x_mm, x_proj, 'b-', linewidth=1, label='Данные')
         # if gauss_x is not None:
         #     ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
         ax_x_proj.set_xlabel('X (мм)')
@@ -451,7 +451,7 @@ class CameraTab(QWidget):
         ax_x_proj.grid(True, linestyle='--', alpha=0.7)
         
         # Рисуем проекцию Y
-        ax_y_proj.plot(y_proj, y_mm, 'b-', label='Данные')
+        ax_y_proj.plot(y_proj, y_mm, 'b-', linewidth=1, label='Данные')
         # if gauss_y is not None:
         #     ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
         ax_y_proj.set_ylabel('Y (мм)')

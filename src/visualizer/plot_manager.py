@@ -112,7 +112,7 @@ class PlotManager:
         ax_x = fig_x.add_subplot(111)
         
         # Строим проекцию на ось X
-        ax_x.plot(x_coords, x_proj, 'b-', linewidth=2, label='Данные')
+        ax_x.plot(x_coords, x_proj, 'b-', linewidth=1, label='Данные')
         
         # Если есть Гауссово приближение, добавляем его
         if gauss_x is not None:
@@ -134,7 +134,7 @@ class PlotManager:
         ax_y = fig_y.add_subplot(111)
         
         # Строим проекцию на ось Y (инвертируем оси!)
-        ax_y.plot(y_proj, y_coords, 'b-', linewidth=2, label='Данные')
+        ax_y.plot(y_proj, y_coords, 'b-', linewidth=1, label='Данные')
         
         # Если есть Гауссово приближение, добавляем его
         if gauss_y is not None:
