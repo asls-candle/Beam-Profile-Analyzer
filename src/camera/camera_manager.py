@@ -2,11 +2,11 @@ import time
 import numpy as np
 from threading import Lock
 try:
-    import PyCapture2
+    import PySpin
     CAMERA_AVAILABLE = True
 except ImportError:
     CAMERA_AVAILABLE = False
-    print("PyCapture2 не найден. Функциональность камеры не будет доступна.")
+    print("Spinnaker не найден. Функциональность камеры не будет доступна.")
 
 class CameraManager:
     """
@@ -31,7 +31,7 @@ class CameraManager:
     def __init__(self):
         self.camera = None
         self.camera_name = None
-        self.bus_manager = None
+        self.system = None
         self.is_connected = False
         self.lock = Lock()  # Для потокобезопасности
         
@@ -72,7 +72,7 @@ class CameraManager:
             True если подключение успешно, иначе False
         """
         if not CAMERA_AVAILABLE:
-            print("PyCapture2 не установлен. Невозможно подключиться к камере.")
+            print("Spinnaker не установлен. Невозможно подключиться к камере.")
             return False
             
         if camera_name not in self.CAMERAS:
@@ -85,37 +85,35 @@ class CameraManager:
                 if self.camera is not None:
                     self.disconnect_camera()
                 
-                # Создаем новый менеджер шины
-                self.bus_manager = PyCapture2.BusManager()
+                # Инициализируем систему
+                self.system = PySpin.System.GetInstance()
                 
-                # Получаем количество камер
-                num_cameras = self.bus_manager.getNumOfCameras()
-                if num_cameras == 0:
+                # Получаем список камер
+                cam_list = self.system.GetCameras()
+                if cam_list.GetSize() == 0:
                     print("Камеры не найдены")
                     return False
                 
                 # Ищем камеру по имени в Linux
                 linux_name = self.CAMERAS[camera_name]["linux_name"]
-                camera_index = None
+                camera_found = False
                 
-                for i in range(num_cameras):
-                    camera_guid = self.bus_manager.getCameraFromIndex(i)
-                    camera = PyCapture2.Camera()
-                    camera.connect(camera_guid)
-                    camera_info = camera.getCameraInfo()
+                for i in range(cam_list.GetSize()):
+                    camera = cam_list.GetByIndex(i)
+                    camera_info = camera.GetTLDeviceNodeMap()
+                    device_name = PySpin.CStringPtr(camera_info.GetNode("DeviceModelName")).GetValue()
                     
-                    # Проверяем совпадает ли имя камеры с заданным
-                    if linux_name in camera_info.interfaceName:
-                        camera_index = i
+                    if linux_name in device_name:
                         self.camera = camera
+                        camera_found = True
                         break
-                    else:
-                        # Освобождаем камеру, если это не та что нам нужна
-                        camera.disconnect()
                 
-                if camera_index is None:
+                if not camera_found:
                     print(f"Камера {camera_name} не найдена в системе")
                     return False
+                
+                # Инициализируем камеру
+                self.camera.Init()
                 
                 # Настраиваем камеру
                 self._configure_camera()
@@ -142,11 +140,14 @@ class CameraManager:
             
         try:
             with self.lock:
-                self.camera.stopCapture()
-                self.camera.disconnect()
+                self.camera.EndAcquisition()
+                self.camera.DeInit()
+                del self.camera
                 self.camera = None
                 self.camera_name = None
-                self.bus_manager = None
+                if self.system is not None:
+                    del self.system
+                self.system = None
                 self.is_connected = False
                 return True
         except Exception as e:
@@ -163,23 +164,25 @@ class CameraManager:
         try:
             # Останавливаем захват если он был включен
             try:
-                self.camera.stopCapture()
+                self.camera.EndAcquisition()
             except:
                 pass
                 
             # Настраиваем триггер
-            trigger_mode = PyCapture2.TRIGGER_MODE.TRIGGER_MODE_0
+            node_map = self.camera.GetNodeMap()
             
-            trigger = PyCapture2.TriggerMode()
-            trigger.onOff = True
-            trigger.mode = trigger_mode
-            trigger.parameter = 0
-            trigger.source = 0  # Внешний триггер
+            # Включаем триггер
+            trigger_mode = PySpin.CEnumerationPtr(node_map.GetNode("TriggerMode"))
+            trigger_mode_on = PySpin.CEnumEntryPtr(trigger_mode.GetCurrentEntry())
+            trigger_mode_on.SetIntValue(1)
             
-            self.camera.setTriggerMode(trigger)
+            # Устанавливаем источник триггера
+            trigger_source = PySpin.CEnumerationPtr(node_map.GetNode("TriggerSource"))
+            trigger_source_line0 = PySpin.CEnumEntryPtr(trigger_source.GetEntryByName("Line0"))
+            trigger_source.SetIntValue(trigger_source_line0.GetValue())
             
             # Запускаем захват
-            self.camera.startCapture()
+            self.camera.BeginAcquisition()
             
         except Exception as e:
             print(f"Ошибка при настройке камеры: {e}")
@@ -197,18 +200,19 @@ class CameraManager:
         try:
             with self.lock:
                 # Ожидаем кадр
-                image = self.camera.retrieveBuffer()
+                image = self.camera.GetNextImage()
                 
-                # Преобразуем данные изображения в numpy массив
-                rows, cols = image.getRows(), image.getCols()
-                image_data = image.getData()
+                # Получаем данные изображения как numpy массив
+                frame = image.GetNDArray()
                 
-                # Преобразуем данные в 16-битный массив
-                frame = np.array(image_data, dtype=np.uint16).reshape((rows, cols))
+                # Освобождаем изображение
+                image.Release()
                 
                 return frame
-        except PyCapture2.Fc2error as e:
-            print(f"Ошибка при захвате кадра: {e}")
+        except PySpin.SpinnakerException as e:
+            print(f"Ошибка при захвате кадра: {e.message}")
+            print(f"Полное сообщение об ошибке: {e.fullmessage}")
+            print(f"Код ошибки: {e.errorcode}")
             return None
         except Exception as e:
             print(f"Неизвестная ошибка при захвате кадра: {e}")

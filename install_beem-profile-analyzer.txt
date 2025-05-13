@@ -1,0 +1,74 @@
+# Инструкция по установке зависимостей для Beam-Profile-Analyzer на Ubuntu 12.04 с Python 3.6
+
+## 1. Подготовка системы
+
+```
+sudo apt-get update
+sudo apt-get install python3.6 python3-pip python3.6-dev python3.6-venv
+sudo apt-get install build-essential libssl-dev libffi-dev
+```
+
+## 2. Создание виртуального окружения
+
+```
+# Создаем директорию для проекта (если еще нет)
+mkdir -p ~/beam-profile-analyzer
+cd ~/beam-profile-analyzer
+
+# Создаем виртуальное окружение
+python3.6 -m venv venv
+
+# Активируем виртуальное окружение
+source venv/bin/activate
+```
+
+## 3. Установка основных зависимостей
+
+```
+# Убедитесь, что виртуальное окружение активировано (в начале строки должно быть (venv))
+pip install --upgrade pip
+pip install numpy==1.16.6 matplotlib==3.3.4 opencv-python==4.2.0.34 scipy==1.4.1 pillow==8.4.0 h5py==2.10.0 PyQt5==5.15.0
+```
+
+## 4. Установка PySpin (Spinnaker SDK)
+
+### 4.1 Установка зависимостей Spinnaker SDK
+```
+sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libgtk-3-dev
+```
+
+### 4.2 Скачивание и установка Spinnaker SDK
+```
+# Скачайте пакет Spinnaker SDK для Ubuntu с сайта Teledyne FLIR
+sudo apt-get install ./spinnaker-3.x.x.x-Ubuntu12.04-amd64-pkg.deb
+```
+
+### 4.3 Установка PySpin для Python 3.6
+```
+# Убедитесь, что виртуальное окружение активировано
+pip install spinnaker_python-4.2.0.46-cp310-cp310-linux_x86_64.whl
+```
+
+## 5. Проверка установки
+
+```
+# Убедитесь, что виртуальное окружение активировано
+python -c "import numpy; import matplotlib; import cv2; import scipy; import PIL; import h5py; import PyQt5; import PySpin; print('Все зависимости успешно установлены!')"
+```
+
+## 6. Запуск приложения
+
+```
+# Активация виртуального окружения (если еще не активировано)
+cd ~/beam-profile-analyzer
+source venv/bin/activate
+
+# Запуск программы
+python -m src.main
+```
+
+## Примечания:
+- Для выхода из виртуального окружения используйте команду `deactivate`
+- Убунту 12.04 уже не поддерживается, рекомендуется обновление до более новой версии
+- При проблемах с установкой NumPy используйте версию 1.19.4 или ниже
+- Для работы с Matplotlib может потребоваться дополнительная настройка Pillow 
