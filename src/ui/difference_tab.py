@@ -120,13 +120,13 @@ class DifferenceTab(QWidget):
         camera_info = self.main_window.get_camera_info()
         
         if camera_info:
-            self.camera_name_label.setText(f"Название: {camera_info.get('camera_name', '-')}")
+            self.camera_name_label.setText("Название: {}".format(camera_info.get('camera_name', '-')))
             resolution = camera_info.get("resolution", (0, 0))
-            self.camera_resolution_label.setText(f"Разрешение: {resolution[0]} x {resolution[1]}")
+            self.camera_resolution_label.setText("Разрешение: {} x {}".format(resolution[0], resolution[1]))
             
             pixel_size_x = camera_info.get("pixel_size_x", 0)
             pixel_size_y = camera_info.get("pixel_size_y", 0)
-            self.camera_pixel_size_label.setText(f"Размер пикселя: {pixel_size_x:.8f} x {pixel_size_y:.8f} мм")
+            self.camera_pixel_size_label.setText("Размер пикселя: {:.8f} x {:.8f} мм".format(pixel_size_x, pixel_size_y))
         else:
             self.camera_name_label.setText("Название: -")
             self.camera_resolution_label.setText("Разрешение: -")
@@ -255,10 +255,10 @@ class DifferenceTab(QWidget):
             )
         
         # Обновляем информацию о центроиде и RMS
-        self.centroid_x_label.setText(f"Центроид X: {centroid_x:.6f} мм")
-        self.centroid_y_label.setText(f"Центроид Y: {centroid_y:.6f} мм")
-        self.rms_x_label.setText(f"RMS X: {rms_x:.6f} мм")
-        self.rms_y_label.setText(f"RMS Y: {rms_y:.6f} мм")
+        self.centroid_x_label.setText("Центроид X: {:.6f} мм".format(centroid_x))
+        self.centroid_y_label.setText("Центроид Y: {:.6f} мм".format(centroid_y))
+        self.rms_x_label.setText("RMS X: {:.6f} мм".format(rms_x))
+        self.rms_y_label.setText("RMS Y: {:.6f} мм".format(rms_y))
         
     def update_tab(self):
         """

@@ -184,5 +184,5 @@ class PlotManager:
             figure.savefig(filepath, bbox_inches='tight')
             return True
         except Exception as e:
-            print(f"Ошибка при сохранении фигуры: {e}")
+            print("Ошибка при сохранении фигуры: {}".format(e))
             return False
