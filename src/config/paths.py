@@ -19,7 +19,7 @@ def get_file_path(folders: Tuple[str, ...], filename: str, extension: str) -> st
         Строка с полным путем к файлу
     """
     nested_path = os.path.join(BASE_DIR, *folders)
-    return os.path.join(nested_path, f"{filename}.{extension}")
+    return os.path.join(nested_path, "{}.{}".format(filename, extension))
 
 
 def get_folder_path(folders: Tuple[str, ...]) -> str:
@@ -47,7 +47,7 @@ def get_file_log_path(module_name: str) -> str:
     """
     file_logs_dir = os.path.join(BASE_DIR, "logs", "files")
     os.makedirs(file_logs_dir, exist_ok=True)
-    return os.path.join(file_logs_dir, f"{module_name}.log")
+    return os.path.join(file_logs_dir, "{}.log".format(module_name))
 
 
 PATH: Dict[str, Union[str, Callable[..., str]]] = {
@@ -70,10 +70,10 @@ PATH: Dict[str, Union[str, Callable[..., str]]] = {
     
     # Динамические пути
     "dynamic_result_file": lambda filename: os.path.join(
-        BASE_DIR, "results", f"{filename}.txt"
+        BASE_DIR, "results", "{}.txt".format(filename)
     ),
     "dynamic_data_file": lambda filename, ext="csv": os.path.join(
-        BASE_DIR, "src", "data", f"{filename}.{ext}"
+        BASE_DIR, "src", "data", "{}.{}".format(filename, ext)
     ),
     "dynamic_file_log": lambda module_name: get_file_log_path(module_name),
 }

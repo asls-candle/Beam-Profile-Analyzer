@@ -24,15 +24,15 @@ class DataImporter:
             dict: Словарь с импортированными данными или None в случае ошибки
         """
         try:
-            logger.info(f"Начало импорта MAT файла: {filepath}")
+            logger.info("Начало импорта MAT файла: {}".format(filepath))
             # Загружаем основной файл
-            logger.debug(f"Загрузка данных из основного файла: {filepath}")
+            logger.debug("Загрузка данных из основного файла: {}".format(filepath))
             shot_data = sio.loadmat(filepath)
             
             # Проверяем наличие данных в файле
             if not shot_data:
-                print(f"Файл {filepath} не содержит данных")
-                logger.error(f"Файл {filepath} не содержит данных")
+                print("Файл {} не содержит данных".format(filepath))
+                logger.error("Файл {} не содержит данных".format(filepath))
                 return None
                 
             # Получаем имя переменной с данными (обычно первая переменная, не начинающаяся с "__")
@@ -40,16 +40,16 @@ class DataImporter:
             shot_var_names = [key for key in shot_data.keys() if not key.startswith("__")]
             
             if not shot_var_names:
-                print(f"Не удалось найти данные в файле {filepath}")
-                logger.error(f"Не удалось найти данные в файле {filepath}")
+                print("Не удалось найти данные в файле {}".format(filepath))
+                logger.error("Не удалось найти данные в файле {}".format(filepath))
                 return None
             
             # Извлекаем первую переменную, которая не начинается с "__"
             shot_var_name = shot_var_names[0]
-            logger.debug(f"Найдены переменные в файле: {shot_var_names}, выбрана первая: {shot_var_name}")
+            logger.debug("Найдены переменные в файле: {}, выбрана первая: {}".format(shot_var_names, shot_var_name))
                 
             # Получаем данные снимка
-            logger.debug(f"Получение данных снимка с использованием переменной: {shot_var_name}")
+            logger.debug("Получение данных снимка с использованием переменной: {}".format(shot_var_name))
             shot = shot_data[shot_var_name]
             
             # Если путь к файлу с фоном не указан, пытаемся найти его автоматически
@@ -60,12 +60,12 @@ class DataImporter:
             # Если файл с фоном не найден
             if background_filepath is None:
                 # Выводим сообщение один раз, а не в каждой итерации поиска файла
-                print(f"Файл с фоном для {filepath} не найден")
-                logger.error(f"Файл с фоном для {filepath} не найден")
+                print("Файл с фоном для {} не найден".format(filepath))
+                logger.error("Файл с фоном для {} не найден".format(filepath))
                 return None
                 
             # Загружаем файл с фоном
-            logger.debug(f"Загрузка файла с фоном: {background_filepath}")
+            logger.debug("Загрузка файла с фоном: {}".format(background_filepath))
             bg_data = sio.loadmat(background_filepath)
             
             # Получаем имя переменной с данными фона
@@ -73,28 +73,28 @@ class DataImporter:
             bg_var_names = [key for key in bg_data.keys() if not key.startswith("__")]
             
             if not bg_var_names:
-                print(f"Не удалось найти данные в файле {background_filepath}")
-                logger.error(f"Не удалось найти данные в файле {background_filepath}")
+                print("Не удалось найти данные в файле {}".format(background_filepath))
+                logger.error("Не удалось найти данные в файле {}".format(background_filepath))
                 return None
                 
             # Извлекаем первую переменную фона, которая не начинается с "__"
             bg_var_name = bg_var_names[0]
-            logger.debug(f"Найдены переменные в файле фона: {bg_var_names}, выбрана первая: {bg_var_name}")
+            logger.debug("Найдены переменные в файле фона: {}, выбрана первая: {}".format(bg_var_names, bg_var_name))
                 
             # Получаем данные фона
-            logger.debug(f"Получение данных фона с использованием переменной: {bg_var_name}")
+            logger.debug("Получение данных фона с использованием переменной: {}".format(bg_var_name))
             background = bg_data[bg_var_name]
             
             # Проверяем совпадение размеров
             if shot.shape != background.shape:
-                print(f"Размеры снимка ({shot.shape}) и фона ({background.shape}) не совпадают")
-                logger.error(f"Размеры снимка ({shot.shape}) и фона ({background.shape}) не совпадают")
+                print("Размеры снимка ({}) и фона ({}) не совпадают".format(shot.shape, background.shape))
+                logger.error("Размеры снимка ({}) и фона ({}) не совпадают".format(shot.shape, background.shape))
                 return None
                 
             # Определяем камеру по размеру массива
-            logger.debug(f"Определение камеры по размеру массива: {shot.shape}")
+            logger.debug("Определение камеры по размеру массива: {}".format(shot.shape))
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
-            logger.info(f"Определена камера: {camera_info['name']}")
+            logger.info("Определена камера: {}".format(camera_info['name']))
             
             # Нормализуем данные
             logger.debug("Начало нормализации данных снимка")
@@ -126,11 +126,11 @@ class DataImporter:
                 "filepath": filepath
             }
             
-            logger.info(f"Успешно импортирован MAT файл: {filepath}")
+            logger.info("Успешно импортирован MAT файл: {}".format(filepath))
             return result
         except Exception as e:
-            print(f"Ошибка при импорте MAT файла: {e}")
-            logger.error(f"Ошибка при импорте MAT файла: {e}", exc_info=True)
+            print("Ошибка при импорте MAT файла: {}".format(e))
+            logger.error("Ошибка при импорте MAT файла: {}".format(e), exc_info=True)
             return None
             
     @staticmethod
@@ -145,13 +145,13 @@ class DataImporter:
             str: Путь к файлу с фоном или None, если не найден
         """
         try:
-            logger.debug(f"Поиск файла с фоном для: {filepath}")
+            logger.debug("Поиск файла с фоном для: {}".format(filepath))
             # Получаем директорию и имя файла
             directory = os.path.dirname(filepath)
             filename = os.path.basename(filepath)
             base_name, ext = os.path.splitext(filename)
             
-            logger.debug(f"Исходный файл: директория={directory}, имя={filename}, базовое имя={base_name}, расширение={ext}")
+            logger.debug("Исходный файл: директория={}, имя={}, базовое имя={}, расширение={}".format(directory, filename, base_name, ext))
             
             # Шаблоны для поиска фонового файла
             logger.debug("Применение шаблонов для поиска фонового файла")
@@ -165,7 +165,7 @@ class DataImporter:
                 
                 # Старые паттерны оставляем как запасные варианты
                 lambda f: re.sub(r'_(\d+)_', r'_\1_bg_', f),  # Замена "_X_" на "_X_bg_"
-                lambda f: f.replace(ext, f"_bg{ext}"),  # Замена расширения на "_bg.mat"
+                lambda f: f.replace(ext, "_bg{}".format(ext)),  # Замена расширения на "_bg.mat"
                 
                 # Новый общий паттерн: вставка "bg" перед расширением
                 lambda f: base_name + "_bg" + ext,
@@ -192,31 +192,31 @@ class DataImporter:
                     else:
                         bg_filepath = os.path.join(directory, bg_filename)
                         
-                    logger.debug(f"Проверка шаблона {i+1}: {bg_filepath}")
+                    logger.debug("Проверка шаблона {}: {}".format(i+1, bg_filepath))
                     
                     # Если файл существует, возвращаем его путь
                     if os.path.exists(bg_filepath) and os.path.isfile(bg_filepath):
-                        logger.info(f"Найден файл с фоном: {bg_filepath}")
+                        logger.info("Найден файл с фоном: {}".format(bg_filepath))
                         return bg_filepath
                 except Exception as e:
-                    logger.debug(f"Ошибка при применении шаблона {i+1}: {e}")
+                    logger.debug("Ошибка при применении шаблона {}: {}".format(i+1, e))
             
             # Ищем в директории файлы с похожими именами
             logger.debug("Поиск файлов с 'bg' в названии в той же директории:")
             for file in os.listdir(directory):
                 if file.endswith(ext) and "bg" in file.lower() and base_name.split('_')[0] in file:
                     bg_filepath = os.path.join(directory, file)
-                    logger.debug(f"Найден возможный файл с фоном: {bg_filepath}")
-                    logger.info(f"Найден файл с фоном: {bg_filepath}")
+                    logger.debug("Найден возможный файл с фоном: {}".format(bg_filepath))
+                    logger.info("Найден файл с фоном: {}".format(bg_filepath))
                     return bg_filepath
             
             # Печатаем сообщение только в debug и warning, но не в консоль,
             # чтобы избежать дублирования в методе import_mat
-            logger.warning(f"Файл с фоном для {filepath} не найден")
+            logger.warning("Файл с фоном для {} не найден".format(filepath))
             return None
         except Exception as e:
-            print(f"Ошибка при поиске файла с фоном: {e}")
-            logger.error(f"Ошибка при поиске файла с фоном: {e}", exc_info=True)
+            print("Ошибка при поиске файла с фоном: {}".format(e))
+            logger.error("Ошибка при поиске файла с фоном: {}".format(e), exc_info=True)
             return None
             
     @staticmethod
@@ -230,7 +230,7 @@ class DataImporter:
         Returns:
             dict: Информация о камере
         """
-        logger.debug(f"Определение камеры по размеру массива: {shape}")
+        logger.debug("Определение камеры по размеру массива: {}".format(shape))
         # Информация о известных камерах
         cameras = {
             "GUN_YAG1": {
@@ -250,11 +250,11 @@ class DataImporter:
         # Проверяем соответствие размеров
         for camera_name, info in cameras.items():
             if shape == info["resolution"] or shape == (info["resolution"][1], info["resolution"][0]):
-                logger.debug(f"Определена известная камера: {camera_name}")
+                logger.debug("Определена известная камера: {}".format(camera_name))
                 return info
                 
         # Если не нашли соответствие, возвращаем значения по умолчанию
-        logger.warning(f"Не удалось определить камеру по размеру {shape}. Используются значения по умолчанию.")
+        logger.warning("Не удалось определить камеру по размеру {}. Используются значения по умолчанию.".format(shape))
         return {
             "resolution": shape,
             "pixel_size_x": 1.0,
@@ -273,7 +273,7 @@ class DataImporter:
         Returns:
             numpy.ndarray: Нормализованный массив
         """
-        logger.debug(f"Нормализация массива размером {array.shape if hasattr(array, 'shape') else 'неизвестно'}")
+        logger.debug("Нормализация массива размером {}".format(array.shape if hasattr(array, 'shape') else 'неизвестно'))
         if array is None or array.size == 0:
             logger.warning("Пустой массив на входе. Возвращается нулевой массив.")
             return np.zeros((1, 1), dtype=np.float64)
@@ -284,7 +284,7 @@ class DataImporter:
         # Находим минимальное и максимальное значение
         min_val = np.min(array_float)
         max_val = np.max(array_float)
-        logger.debug(f"Диапазон значений в массиве: [{min_val}, {max_val}]")
+        logger.debug("Диапазон значений в массиве: [{}, {}]".format(min_val, max_val))
         
         # Избегаем деления на ноль
         if max_val == min_val:
@@ -309,19 +309,19 @@ class DataImporter:
             dict: Словарь с импортированными данными или None в случае ошибки
         """
         try:
-            logger.info(f"Импорт данных из файла: {filepath}")
+            logger.info("Импорт данных из файла: {}".format(filepath))
             # Определяем формат по расширению
             _, ext = os.path.splitext(filepath)
-            logger.debug(f"Определено расширение файла: {ext}")
+            logger.debug("Определено расширение файла: {}".format(ext))
             
             if ext.lower() == ".mat":
                 logger.debug("Выбран импорт MAT файла")
                 return DataImporter.import_mat(filepath)
             else:
-                print(f"Неподдерживаемый формат файла: {ext}")
-                logger.error(f"Неподдерживаемый формат файла: {ext}")
+                print("Неподдерживаемый формат файла: {}".format(ext))
+                logger.error("Неподдерживаемый формат файла: {}".format(ext))
                 return None
         except Exception as e:
-            print(f"Ошибка при импорте данных: {e}")
-            logger.error(f"Ошибка при импорте данных: {e}", exc_info=True)
+            print("Ошибка при импорте данных: {}".format(e))
+            logger.error("Ошибка при импорте данных: {}".format(e), exc_info=True)
             return None

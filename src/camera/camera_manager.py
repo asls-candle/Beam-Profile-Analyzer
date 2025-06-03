@@ -2,11 +2,11 @@ import time
 import numpy as np
 from threading import Lock
 try:
-    import PySpin
+    from pydc1394 import Camera, Context
     CAMERA_AVAILABLE = True
 except ImportError:
     CAMERA_AVAILABLE = False
-    print("Spinnaker не найден. Функциональность камеры не будет доступна.")
+    print("pydc1394 не найден. Функциональность камеры не будет доступна.")
 
 class CameraManager:
     """
@@ -29,9 +29,12 @@ class CameraManager:
     }
     
     def __init__(self):
+        """
+        Инициализирует менеджер камеры
+        """
         self.camera = None
         self.camera_name = None
-        self.system = None
+        self.context = None
         self.is_connected = False
         self.lock = Lock()  # Для потокобезопасности
         
@@ -42,7 +45,28 @@ class CameraManager:
         Returns:
             Список имен камер
         """
-        return list(self.CAMERAS.keys())
+        if not CAMERA_AVAILABLE:
+            return list(self.CAMERAS.keys())
+            
+        # Получаем список физически подключенных камер
+        try:
+            context = Context()
+            cameras = context.cameras
+            
+            # Возвращаем список имен камер, которые мы можем обнаружить
+            available_cameras = []
+            for camera_name, camera_info in self.CAMERAS.items():
+                linux_name = camera_info.get("linux_name", "")
+                
+                for cam in cameras:
+                    if linux_name in str(cam):
+                        available_cameras.append(camera_name)
+                        break
+                        
+            return available_cameras
+        except Exception as e:
+            print("Ошибка при получении списка камер: {}".format(e))
+            return list(self.CAMERAS.keys())
     
     def get_camera_info(self, camera_name=None):
         """
@@ -72,11 +96,11 @@ class CameraManager:
             True если подключение успешно, иначе False
         """
         if not CAMERA_AVAILABLE:
-            print("Spinnaker не установлен. Невозможно подключиться к камере.")
+            print("pydc1394 не установлен. Невозможно подключиться к камере.")
             return False
             
         if camera_name not in self.CAMERAS:
-            print(f"Камера {camera_name} не найдена")
+            print("Камера {} не найдена в конфигурации".format(camera_name))
             return False
             
         try:
@@ -85,35 +109,45 @@ class CameraManager:
                 if self.camera is not None:
                     self.disconnect_camera()
                 
-                # Инициализируем систему
-                self.system = PySpin.System.GetInstance()
+                # Инициализируем контекст pydc1394
+                self.context = Context()
                 
                 # Получаем список камер
-                cam_list = self.system.GetCameras()
-                if cam_list.GetSize() == 0:
-                    print("Камеры не найдены")
+                cameras = self.context.cameras
+                if not cameras:
+                    print("Камеры не найдены в системе")
                     return False
                 
                 # Ищем камеру по имени в Linux
                 linux_name = self.CAMERAS[camera_name]["linux_name"]
                 camera_found = False
+                cam_guid = None
                 
-                for i in range(cam_list.GetSize()):
-                    camera = cam_list.GetByIndex(i)
-                    camera_info = camera.GetTLDeviceNodeMap()
-                    device_name = PySpin.CStringPtr(camera_info.GetNode("DeviceModelName")).GetValue()
-                    
-                    if linux_name in device_name:
-                        self.camera = camera
+                for cam in cameras:
+                    # Проверяем соответствие имени камеры
+                    cam_info = str(cam)
+                    if linux_name in cam_info:
+                        cam_guid = cam[0]  # GUID находится в первом элементе кортежа
                         camera_found = True
                         break
                 
                 if not camera_found:
-                    print(f"Камера {camera_name} не найдена в системе")
+                    print("Камера {} не найдена в системе".format(camera_name))
                     return False
                 
+                # Создаем объект камеры с указанным GUID
+                self.camera = Camera(guid=cam_guid)
+                
+                # Выводим информацию о камере
+                print("Подключено к камере: {}".format(camera_name))
+                if hasattr(self.camera, 'vendor') and hasattr(self.camera, 'model'):
+                    vendor = self.camera.vendor.decode('utf-8', errors='replace') if isinstance(self.camera.vendor, bytes) else self.camera.vendor
+                    model = self.camera.model.decode('utf-8', errors='replace') if isinstance(self.camera.model, bytes) else self.camera.model
+                    print("Производитель: {}".format(vendor))
+                    print("Модель: {}".format(model))
+                
                 # Инициализируем камеру
-                self.camera.Init()
+                self.camera.start_capture()
                 
                 # Настраиваем камеру
                 self._configure_camera()
@@ -121,11 +155,10 @@ class CameraManager:
                 self.camera_name = camera_name
                 self.is_connected = True
                 
-                print(f"Подключено к камере {camera_name}")
                 return True
                 
         except Exception as e:
-            print(f"Ошибка при подключении к камере: {e}")
+            print("Ошибка при подключении к камере: {}".format(e))
             return False
     
     def disconnect_camera(self):
@@ -140,18 +173,18 @@ class CameraManager:
             
         try:
             with self.lock:
-                self.camera.EndAcquisition()
-                self.camera.DeInit()
+                self.camera.stop_capture()
                 del self.camera
                 self.camera = None
                 self.camera_name = None
-                if self.system is not None:
-                    del self.system
-                self.system = None
+                if self.context is not None:
+                    del self.context
+                self.context = None
                 self.is_connected = False
+                print("Камера успешно отключена")
                 return True
         except Exception as e:
-            print(f"Ошибка при отключении от камеры: {e}")
+            print("Ошибка при отключении от камеры: {}".format(e))
             return False
     
     def _configure_camera(self):
@@ -162,30 +195,19 @@ class CameraManager:
             return
             
         try:
-            # Останавливаем захват если он был включен
-            try:
-                self.camera.EndAcquisition()
-            except:
-                pass
-                
-            # Настраиваем триггер
-            node_map = self.camera.GetNodeMap()
+            # Настраиваем параметры камеры с помощью pydc1394
             
-            # Включаем триггер
-            trigger_mode = PySpin.CEnumerationPtr(node_map.GetNode("TriggerMode"))
-            trigger_mode_on = PySpin.CEnumEntryPtr(trigger_mode.GetCurrentEntry())
-            trigger_mode_on.SetIntValue(1)
+            # Устанавливаем режим триггера
+            self.camera.trigger_mode = 'external'
             
-            # Устанавливаем источник триггера
-            trigger_source = PySpin.CEnumerationPtr(node_map.GetNode("TriggerSource"))
-            trigger_source_line0 = PySpin.CEnumEntryPtr(trigger_source.GetEntryByName("Line0"))
-            trigger_source.SetIntValue(trigger_source_line0.GetValue())
+            # Устанавливаем источник триггера (обычно 0 для Line0)
+            self.camera.trigger_source = 0
             
-            # Запускаем захват
-            self.camera.BeginAcquisition()
+            # Применяем настройки
+            self.camera.apply_settings()
             
         except Exception as e:
-            print(f"Ошибка при настройке камеры: {e}")
+            print("Ошибка при настройке камеры: {}".format(e))
     
     def capture_single_frame(self):
         """
@@ -199,23 +221,24 @@ class CameraManager:
             
         try:
             with self.lock:
-                # Ожидаем кадр
-                image = self.camera.GetNextImage()
+                # Захватываем кадр
+                self.camera.start_one_shot()
+                frame = self.camera.dequeue()
                 
-                # Получаем данные изображения как numpy массив
-                frame = image.GetNDArray()
+                # Копируем данные кадра
+                frame_data = frame.copy()
                 
-                # Освобождаем изображение
-                image.Release()
+                # Преобразуем в numpy массив, если необходимо
+                if not isinstance(frame_data, np.ndarray):
+                    frame_data = np.array(frame_data)
                 
-                return frame
-        except PySpin.SpinnakerException as e:
-            print(f"Ошибка при захвате кадра: {e.message}")
-            print(f"Полное сообщение об ошибке: {e.fullmessage}")
-            print(f"Код ошибки: {e.errorcode}")
-            return None
+                # Возвращаем кадр в очередь
+                frame.enqueue()
+                self.camera.stop_one_shot()
+                
+                return frame_data
         except Exception as e:
-            print(f"Неизвестная ошибка при захвате кадра: {e}")
+            print("Ошибка при захвате кадра: {}".format(e))
             return None
     
     def capture_background_frames(self, num_frames=40):
@@ -243,15 +266,20 @@ class CameraManager:
                 # Задержка между кадрами
                 time.sleep(0.25)
                 
+                # Вывод прогресса
+                print("Захвачено кадров: {}/{}".format(i+1, num_frames), end="\r")
+                
                 # Если собрали достаточно кадров или процесс был прерван
                 if len(frames) >= num_frames:
                     break
-                    
+            
+            print()  # Новая строка после прогресса
+            
             # Преобразуем список кадров в трехмерный массив numpy
             if frames:
                 return np.array(frames)
             return None
             
         except Exception as e:
-            print(f"Ошибка при захвате кадров фона: {e}")
+            print("Ошибка при захвате кадров фона: {}".format(e))
             return None

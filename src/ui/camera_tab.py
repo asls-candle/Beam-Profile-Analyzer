@@ -284,7 +284,7 @@ class CameraTab(QWidget):
         self.file_radio.setChecked(not is_camera_mode)
         
         # Обновление метки режима
-        self.mode_status_label.setText(f"Режим: {'Камера' if is_camera_mode else 'Чтение файлов'}")
+        self.mode_status_label.setText("Режим: {}".format('Камера' if is_camera_mode else 'Чтение файлов'))
         
         # Управление кнопкой "Открыть файл" - активна только в режиме чтения файла
         self.open_file_btn.setEnabled(not is_camera_mode)
@@ -315,7 +315,7 @@ class CameraTab(QWidget):
             if camera_connected:
                 camera_info = self.main_window.camera_manager.get_camera_info()
                 if camera_info:
-                    self.camera_status_label.setText(f"Камера: {camera_info.get('name', 'Подключена')}")
+                    self.camera_status_label.setText("Камера: {}".format(camera_info.get('name', 'Подключена')))
                 else:
                     self.camera_status_label.setText("Камера: Подключена")
             else:
@@ -361,13 +361,13 @@ class CameraTab(QWidget):
         camera_info = self.main_window.get_camera_info()
         
         if camera_info:
-            self.camera_name_label.setText(f"Название: {camera_info.get('camera_name', '-')}")
+            self.camera_name_label.setText("Название: {}".format(camera_info.get('camera_name', '-')))
             resolution = camera_info.get("resolution", (0, 0))
-            self.camera_resolution_label.setText(f"Разрешение: {resolution[0]} x {resolution[1]}")
+            self.camera_resolution_label.setText("Разрешение: {} x {}".format(resolution[0], resolution[1]))
             
             pixel_size_x = camera_info.get("pixel_size_x", 0)
             pixel_size_y = camera_info.get("pixel_size_y", 0)
-            self.camera_pixel_size_label.setText(f"Размер пикселя: {pixel_size_x:.8f} x {pixel_size_y:.8f} мм")
+            self.camera_pixel_size_label.setText("Размер пикселя: {:.8f} x {:.8f} мм".format(pixel_size_x, pixel_size_y))
         else:
             self.camera_name_label.setText("Название: -")
             self.camera_resolution_label.setText("Разрешение: -")
@@ -483,10 +483,10 @@ class CameraTab(QWidget):
         centroid_x, centroid_y = data["centroid"]
         rms_x, rms_y = data["rms"]
         
-        self.centroid_x_label.setText(f"Центроид X: {centroid_x:.6f} мм")
-        self.centroid_y_label.setText(f"Центроид Y: {centroid_y:.6f} мм")
-        self.rms_x_label.setText(f"RMS X: {rms_x:.6f} мм")
-        self.rms_y_label.setText(f"RMS Y: {rms_y:.6f} мм")
+        self.centroid_x_label.setText("Центроид X: {:.6f} мм".format(centroid_x))
+        self.centroid_y_label.setText("Центроид Y: {:.6f} мм".format(centroid_y))
+        self.rms_x_label.setText("RMS X: {:.6f} мм".format(rms_x))
+        self.rms_y_label.setText("RMS Y: {:.6f} мм".format(rms_y))
         
     def update_tab(self):
         """
@@ -526,7 +526,7 @@ class CameraTab(QWidget):
             return
             
         if not self.main_window.connect_to_camera(camera_name):
-            QMessageBox.critical(self, "Ошибка", f"Не удалось подключиться к камере {camera_name}")
+            QMessageBox.critical(self, "Ошибка", "Не удалось подключиться к камере {}".format(camera_name))
             
     def on_stop_camera(self):
         """

@@ -271,7 +271,7 @@ class MainWindow(QMainWindow):
         result = DataExporter.export_data(filepath, export_data, export_format, self.plot_manager)
         
         if result:
-            QMessageBox.information(self, "Информация", f"Данные успешно экспортированы в {filepath}")
+            QMessageBox.information(self, "Информация", "Данные успешно экспортированы в {}".format(filepath))
         else:
             QMessageBox.warning(self, "Предупреждение", "Ошибка при экспорте данных")
             
@@ -300,7 +300,7 @@ class MainWindow(QMainWindow):
             data = DataImporter.import_data(filepath)
             
             if data is None:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось импортировать файл: {filepath}")
+                QMessageBox.critical(self, "Ошибка", "Не удалось импортировать файл: {}".format(filepath))
                 return False
             
             # Переключаемся в режим чтения файла
@@ -379,9 +379,9 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 # Ошибка при вычислениях не должна прервать загрузку файла,
                 # но должна быть залогирована и показана пользователю
-                print(f"Ошибка при вычислении параметров: {e}")
+                print("Ошибка при вычислении параметров: {}".format(e))
                 QMessageBox.warning(self, "Предупреждение", 
-                                   f"Файл загружен, но не удалось вычислить параметры: {str(e)}")
+                                   "Файл загружен, но не удалось вычислить параметры: {}".format(str(e)))
             
             # Обновляем все вкладки
             self.camera_tab.update_tab()
@@ -408,7 +408,7 @@ class MainWindow(QMainWindow):
                 self.difference_tab.update_timer.start(500)
             
             # Показываем подробное сообщение об ошибке
-            error_message = f"Ошибка при импорте файла {filepath}:\n{str(e)}"
+            error_message = "Ошибка при импорте файла {}:\n{}".format(filepath, str(e))
             print(error_message)
             QMessageBox.critical(self, "Ошибка импорта", error_message)
             
@@ -478,8 +478,8 @@ class MainWindow(QMainWindow):
             export_format = default_format
             
         # Добавляем расширение если его нет
-        if export_format != "png" and not filepath.endswith(f".{export_format}"):
-            filepath += f".{export_format}"
+        if export_format != "png" and not filepath.endswith(".{}".format(export_format)):
+            filepath += ".{}".format(export_format)
             
         # Экспортируем данные
         return self.export_data(filepath, export_format)
