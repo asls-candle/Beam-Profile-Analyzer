@@ -28,15 +28,36 @@ class CameraManager:
         }
     }
     
-    def __init__(self):
+    def __init__(self, use_trigger=False):
         """
         Инициализирует менеджер камеры
+        
+        Args:
+            use_trigger: Использовать ли внешний триггер для камеры
         """
         self.camera = None
         self.camera_name = None
         self.context = None
         self.is_connected = False
+        self.use_trigger = use_trigger  # Флаг использования триггера
         self.lock = Lock()  # Для потокобезопасности
+        
+    def set_trigger_mode(self, use_trigger):
+        """
+        Устанавливает режим триггера камеры
+        
+        Args:
+            use_trigger: True для использования внешнего триггера, False для работы без триггера
+            
+        Returns:
+            True если режим успешно изменен, иначе False
+        """
+        self.use_trigger = use_trigger
+        
+        # Если камера подключена, перенастраиваем ее
+        if self.is_connected and self.camera is not None:
+            return self._configure_camera()
+        return True
         
     def get_camera_list(self):
         """
@@ -155,6 +176,9 @@ class CameraManager:
                 self.camera_name = camera_name
                 self.is_connected = True
                 
+                # Выводим информацию о режиме триггера
+                print("Режим триггера: {}".format("Внешний" if self.use_trigger else "Без триггера"))
+                
                 return True
                 
         except Exception as e:
@@ -190,24 +214,61 @@ class CameraManager:
     def _configure_camera(self):
         """
         Настраивает параметры камеры
+        
+        Returns:
+            True если настройка успешна, иначе False
         """
         if not self.is_connected or self.camera is None:
-            return
+            return False
             
         try:
-            # Настраиваем параметры камеры с помощью pydc1394
+            # Настраиваем общие параметры камеры
+            try:
+                # Настраиваем яркость
+                if hasattr(self.camera, 'brightness'):
+                    self.camera.brightness.mode = 'auto'
+                    if self.camera.brightness.mode != 'auto':
+                        self.camera.brightness.value = 200  # Увеличиваем яркость
+                
+                # Настраиваем экспозицию
+                if hasattr(self.camera, 'exposure'):
+                    self.camera.exposure.mode = 'auto'
+                    if self.camera.exposure.mode != 'auto':
+                        self.camera.exposure.value = 400  # Увеличиваем экспозицию
+                
+                # Настраиваем баланс белого
+                if hasattr(self.camera, 'white_balance'):
+                    self.camera.white_balance.mode = 'auto'
+                
+                # Устанавливаем максимальное усиление для камеры
+                if hasattr(self.camera, 'gain'):
+                    self.camera.gain.mode = 'auto'
+                    if self.camera.gain.mode != 'auto':
+                        self.camera.gain.value = self.camera.gain.max
+            except AttributeError:
+                print("Внимание: некоторые автоматические настройки не поддерживаются камерой")
             
-            # Устанавливаем режим триггера
-            self.camera.trigger_mode = 'external'
-            
-            # Устанавливаем источник триггера (обычно 0 для Line0)
-            self.camera.trigger_source = 0
+            # Настраиваем режим триггера, если нужно
+            if self.use_trigger:
+                print("Настройка камеры для работы с внешним триггером")
+                # Устанавливаем режим триггера
+                self.camera.trigger_mode = 'external'
+                
+                # Устанавливаем источник триггера (обычно 0 для Line0)
+                self.camera.trigger_source = 0
+            else:
+                # Отключаем режим триггера, если он был включен
+                if hasattr(self.camera, 'trigger_mode') and self.camera.trigger_mode != 'internal':
+                    print("Отключение внешнего триггера")
+                    self.camera.trigger_mode = 'internal'
             
             # Применяем настройки
             self.camera.apply_settings()
+            return True
             
         except Exception as e:
             print("Ошибка при настройке камеры: {}".format(e))
+            return False
     
     def capture_single_frame(self):
         """
@@ -221,9 +282,14 @@ class CameraManager:
             
         try:
             with self.lock:
-                # Захватываем кадр
-                self.camera.start_one_shot()
-                frame = self.camera.dequeue()
+                if self.use_trigger:
+                    # В режиме внешнего триггера ожидаем кадр
+                    print("Ожидание кадра по внешнему триггеру...")
+                    frame = self.camera.dequeue(timeout=5000)  # таймаут 5 секунд
+                else:
+                    # В режиме без триггера явно запускаем захват
+                    self.camera.start_one_shot()
+                    frame = self.camera.dequeue(timeout=2000)  # таймаут 2 секунды
                 
                 # Копируем данные кадра
                 frame_data = frame.copy()
@@ -234,7 +300,10 @@ class CameraManager:
                 
                 # Возвращаем кадр в очередь
                 frame.enqueue()
-                self.camera.stop_one_shot()
+                
+                # Останавливаем режим захвата одного кадра, если не используем триггер
+                if not self.use_trigger:
+                    self.camera.stop_one_shot()
                 
                 return frame_data
         except Exception as e:
