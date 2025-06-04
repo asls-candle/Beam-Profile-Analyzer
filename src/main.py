@@ -15,7 +15,11 @@ from src.config.paths import PATH
 from src.ui.main_window import MainWindow
 
 # Создаем директорию для логов, если её нет
-os.makedirs(PATH["logs_dir"], exist_ok=True)
+try:
+    os.makedirs(PATH["logs_dir"])
+except OSError:
+    if not os.path.isdir(PATH["logs_dir"]):
+        raise
 
 # Инициализируем систему логирования
 logging.config.dictConfig(log_config)

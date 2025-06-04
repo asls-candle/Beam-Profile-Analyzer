@@ -46,11 +46,16 @@ def get_file_log_path(module_name: str) -> str:
         Строка с полным путем к файлу лога
     """
     file_logs_dir = os.path.join(BASE_DIR, "logs", "files")
-    os.makedirs(file_logs_dir, exist_ok=True)
+    try:
+        os.makedirs(file_logs_dir)
+    except OSError:
+        if not os.path.isdir(file_logs_dir):
+            raise
     return os.path.join(file_logs_dir, "{}.log".format(module_name))
 
 
-PATH: Dict[str, Union[str, Callable[..., str]]] = {
+# Тип: Dict[str, Union[str, Callable[..., str]]]
+PATH = {
     # Директории для логов
     "logs_dir": os.path.join(BASE_DIR, "logs"),
     "file_logs_dir": os.path.join(BASE_DIR, "logs", "files"),

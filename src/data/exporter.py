@@ -25,7 +25,13 @@ class DataExporter:
         """
         try:
             # Создаем директорию, если ее нет
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            dir_path = os.path.dirname(filepath)
+            if dir_path:
+                try:
+                    os.makedirs(dir_path)
+                except OSError:
+                    if not os.path.isdir(dir_path):
+                        raise
             
             # Информационная часть (метаданные)
             with open(filepath, 'w', newline='') as csvfile:
@@ -35,7 +41,7 @@ class DataExporter:
                 writer.writerow(["# Metadata"])
                 for key, value in data_dict.items():
                     if not isinstance(value, np.ndarray):
-                        writer.writerow([f"# {key}", value])
+                        writer.writerow(["# {}".format(key), value])
                 
                 writer.writerow(["# Data"])
                 
@@ -43,20 +49,20 @@ class DataExporter:
                 for key, value in data_dict.items():
                     if isinstance(value, np.ndarray):
                         # Добавляем заголовок для массива
-                        writer.writerow([f"# {key}", value.shape])
+                        writer.writerow(["# {}".format(key), value.shape])
                         
                         # Записываем данные массива с 7 знаками после запятой
                         if value.ndim == 2:  # Для двумерных массивов
                             for row in value:
-                                writer.writerow([f"{x:.7f}" for x in row])
+                                writer.writerow(["{:.7f}".format(x) for x in row])
                         else:  # Для других размерностей
-                            writer.writerow([f"{x:.7f}" for x in value.flatten()])
+                            writer.writerow(["{:.7f}".format(x) for x in value.flatten()])
                         
                         writer.writerow(["# End of", key])
                         
             return True
         except Exception as e:
-            print(f"Ошибка при экспорте CSV файла: {e}")
+            print("Ошибка при экспорте CSV файла: {}".format(e))
             return False
     
     @staticmethod
@@ -98,7 +104,11 @@ class DataExporter:
         """
         try:
             # Создаем папку если ее нет
-            os.makedirs(folder_path, exist_ok=True)
+            try:
+                os.makedirs(folder_path)
+            except OSError:
+                if not os.path.isdir(folder_path):
+                    raise
             
             # Сохраняем метаданные в JSON
             metadata = {
@@ -133,14 +143,14 @@ class DataExporter:
                     colored_data = cv2.flip(colored_data, 0)
                     
                     # Сохраняем изображение с помощью OpenCV
-                    cv2.imwrite(os.path.join(folder_path, f"{name}.png"), colored_data)
+                    cv2.imwrite(os.path.join(folder_path, "{}.png".format(name)), colored_data)
                     
                     # Выводим размеры для диагностики
-                    print(f"Экспортировано изображение {name}.png с размерами {width}x{height} пикселей")
+                    print("Экспортировано изображение {}.png с размерами {}x{} пикселей".format(name, width, height))
             
             return True
         except Exception as e:
-            print(f"Ошибка при экспорте PNG файлов: {e}")
+            print("Ошибка при экспорте PNG файлов: {}".format(e))
             return False
             
     @staticmethod
@@ -172,13 +182,13 @@ class DataExporter:
                 
                 # Создаем папку с датой и временем в названии, используя разделитель между датой и временем
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                folder_name = f"{base_name_without_ext}_{timestamp}"
+                folder_name = "{}_{}".format(base_name_without_ext, timestamp)
                 folder_path = os.path.join(os.path.dirname(filepath), folder_name)
                 
                 return DataExporter.export_png(folder_path, data, plot_manager)
             else:
-                print(f"Неизвестный формат экспорта: {export_format}")
+                print("Неизвестный формат экспорта: {}".format(export_format))
                 return False
         except Exception as e:
-            print(f"Ошибка при экспорте данных: {e}")
+            print("Ошибка при экспорте данных: {}".format(e))
             return False
