@@ -4,9 +4,10 @@ from threading import Lock
 try:
     from pydc1394 import Camera, Context
     CAMERA_AVAILABLE = True
-except ImportError:
+except (ImportError, TypeError, OSError) as e:
     CAMERA_AVAILABLE = False
-    print("pydc1394 не найден. Функциональность камеры не будет доступна.")
+    print("pydc1394 не найден или не может быть загружен. Функциональность камеры не будет доступна.")
+    print("Ошибка: {}".format(e))
 
 class CameraManager:
     """

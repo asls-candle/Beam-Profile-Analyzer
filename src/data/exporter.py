@@ -3,8 +3,9 @@ import json
 import numpy as np
 import csv
 import datetime
-import cv2
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from PIL import Image
 
 class DataExporter:
     """
@@ -76,23 +77,24 @@ class DataExporter:
         Returns:
             np.ndarray: RGB изображение с применённой цветовой картой
         """
-        # Нормализуем данные к диапазону [0, 1], затем к [0, 255]
+        # Нормализуем данные к диапазону [0, 1]
         if data.max() > data.min():
             normalized = (data - data.min()) / (data.max() - data.min())
         else:
             normalized = np.zeros_like(data)
             
-        normalized_uint8 = (normalized * 255).astype(np.uint8)
+        # Применяем цветовую карту jet через matplotlib
+        colored = cm.jet(normalized)
         
-        # Применяем цветовую карту jet
-        colored = cv2.applyColorMap(normalized_uint8, cv2.COLORMAP_JET)
+        # Преобразуем в RGB формат (убираем альфа-канал)
+        colored_rgb = (colored[:, :, :3] * 255).astype(np.uint8)
         
-        return colored
+        return colored_rgb
             
     @staticmethod
     def export_png(folder_path, data_dict, plot_manager):
         """
-        Экспортирует данные в виде PNG изображений и JSON с метаданными
+        Экспортирует данные в виде PNG изображений с точным соответствием разрешению камеры
         
         Args:
             folder_path: Путь к папке для сохранения
@@ -104,11 +106,7 @@ class DataExporter:
         """
         try:
             # Создаем папку если ее нет
-            try:
-                os.makedirs(folder_path)
-            except OSError:
-                if not os.path.isdir(folder_path):
-                    raise
+            os.makedirs(folder_path, exist_ok=True)
             
             # Сохраняем метаданные в JSON
             metadata = {
@@ -132,25 +130,44 @@ class DataExporter:
             
             for name, data in images_data:
                 if data is not None:
-                    # Получаем размеры изображения
+                    # Получаем точные размеры данных с камеры
                     height, width = data.shape
                     
-                    # Создаем цветное изображение из данных
-                    colored_data = DataExporter.apply_colormap(data)
+                    # Важно: отключаем все автоматические настройки matplotlib
+                    plt.ioff()  # Отключаем интерактивный режим
                     
-                    # Переворачиваем изображение по вертикали для соответствия matplotlib (origin='lower')
-                    # в OpenCV flip с параметром 0 означает переворот по оси X (вертикальный)
-                    colored_data = cv2.flip(colored_data, 0)
+                    # Создаем фигуру с точным размером в пикселях
+                    dpi = 100  # фиксированное значение DPI для расчета
+                    # Размер фигуры в дюймах = размер в пикселях / DPI
+                    fig = plt.figure(figsize=(width/dpi, height/dpi), dpi=dpi, frameon=False)
                     
-                    # Сохраняем изображение с помощью OpenCV
-                    cv2.imwrite(os.path.join(folder_path, "{}.png".format(name)), colored_data)
+                    # Добавляем ось, занимающую всю область фигуры
+                    ax = plt.Axes(fig, [0, 0, 1, 1])
+                    ax.set_axis_off()
+                    fig.add_axes(ax)
                     
-                    # Выводим размеры для диагностики
-                    print("Экспортировано изображение {}.png с размерами {}x{} пикселей".format(name, width, height))
+                    # Отображаем данные с отключенной интерполяцией для сохранения пиксельной точности
+                    ax.imshow(data, cmap='jet', interpolation='nearest', origin='lower')
+                    
+                    # Сохраняем изображение с точными настройками
+                    filepath = os.path.join(folder_path, f"{name}.png")
+                    fig.savefig(filepath, dpi=dpi, bbox_inches=None, pad_inches=0)
+                    plt.close(fig)
+                    
+                    # Проверяем размеры созданного файла для подтверждения
+                    with Image.open(filepath) as img:
+                        actual_width, actual_height = img.size
+                        print(f"Экспортировано изображение {name}.png размером {actual_width}x{actual_height} " 
+                              f"(ожидаемый размер: {width}x{height})")
+                        
+                        # Если размеры не совпадают, выводим предупреждение
+                        if actual_width != width or actual_height != height:
+                            print(f"ВНИМАНИЕ: Размеры экспортированного изображения {name}.png не соответствуют " 
+                                  f"размерам данных с камеры!")
             
             return True
         except Exception as e:
-            print("Ошибка при экспорте PNG файлов: {}".format(e))
+            print(f"Ошибка при экспорте PNG файлов: {e}")
             return False
             
     @staticmethod
