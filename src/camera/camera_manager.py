@@ -184,6 +184,9 @@ class CameraManager:
         if camera_name is None:
             camera_name = self.camera_name
             
+        if camera_name is None:
+            return None
+            
         if camera_name in self.CAMERAS:
             return self.CAMERAS[camera_name]
         

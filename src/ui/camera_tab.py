@@ -358,6 +358,16 @@ class CameraTab(QWidget):
         """
         Обновляет информацию о камере
         """
+        # Получаем текущий режим
+        is_camera_mode = self.main_window.current_mode == "camera"
+        
+        # В режиме камеры проверяем, подключена ли камера
+        if is_camera_mode and not self.main_window.camera_manager.is_connected:
+            self.camera_name_label.setText("Название: -")
+            self.camera_resolution_label.setText("Разрешение: -")
+            self.camera_pixel_size_label.setText("Размер пикселя: -")
+            return
+            
         camera_info = self.main_window.get_camera_info()
         
         if camera_info:
@@ -377,6 +387,10 @@ class CameraTab(QWidget):
         """
         Обновляет все графики
         """
+        # В режиме камеры проверяем, подключена ли камера
+        if self.main_window.current_mode == "camera" and not self.main_window.camera_manager.is_connected:
+            return
+            
         # Получаем текущие данные
         data = self.main_window.get_current_data()
         camera_info = self.main_window.get_camera_info()

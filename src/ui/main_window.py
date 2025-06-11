@@ -220,7 +220,10 @@ class MainWindow(QMainWindow):
             dict: Информация о камере или None если камера не выбрана
         """
         if self.current_mode == "camera":
-            return self.camera_manager.get_camera_info()
+            if self.camera_manager.is_connected:
+                return self.camera_manager.get_camera_info()
+            else:
+                return None
         else:
             # В режиме чтения файла берем информацию из данных файла
             if self.file_data["current_frame"] is not None:
