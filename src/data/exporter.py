@@ -150,24 +150,24 @@ class DataExporter:
                     ax.imshow(data, cmap='jet', interpolation='nearest', origin='lower')
                     
                     # Сохраняем изображение с точными настройками
-                    filepath = os.path.join(folder_path, f"{name}.png")
+                    filepath = os.path.join(folder_path, "{}.png".format(name))
                     fig.savefig(filepath, dpi=dpi, bbox_inches=None, pad_inches=0)
                     plt.close(fig)
                     
                     # Проверяем размеры созданного файла для подтверждения
                     with Image.open(filepath) as img:
                         actual_width, actual_height = img.size
-                        print(f"Экспортировано изображение {name}.png размером {actual_width}x{actual_height} " 
-                              f"(ожидаемый размер: {width}x{height})")
+                        print("Экспортировано изображение {}.png размером {}x{} ".format(name, actual_width, actual_height) 
+                              + "(ожидаемый размер: {}x{})".format(width, height))
                         
                         # Если размеры не совпадают, выводим предупреждение
                         if actual_width != width or actual_height != height:
-                            print(f"ВНИМАНИЕ: Размеры экспортированного изображения {name}.png не соответствуют " 
-                                  f"размерам данных с камеры!")
+                            print("ВНИМАНИЕ: Размеры экспортированного изображения {}.png не соответствуют ".format(name) 
+                                  + "размерам данных с камеры!")
             
             return True
         except Exception as e:
-            print(f"Ошибка при экспорте PNG файлов: {e}")
+            print("Ошибка при экспорте PNG файлов: {}".format(e))
             return False
             
     @staticmethod
