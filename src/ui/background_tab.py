@@ -140,6 +140,7 @@ class BackgroundTab(QWidget):
         
         # Если нет данных фона или информации о камере
         if data["background"] is None or camera_info is None:
+            print("BackgroundTab: Нет данных фона или информации о камере")
             return
         
         # Проверяем изменились ли данные
@@ -147,6 +148,7 @@ class BackgroundTab(QWidget):
         if self.last_data_hash == current_hash and self.plot_canvas is not None:
             return  # Данные не изменились, выходим
         
+        print("BackgroundTab: Обновляем графики фона. Предыдущий хеш: {}, новый хеш: {}".format(self.last_data_hash, current_hash))
         self.last_data_hash = current_hash
         
         # Получаем информацию о камере
@@ -170,6 +172,7 @@ class BackgroundTab(QWidget):
         
         # Получаем данные изображения
         img_data = data["background"].data
+        print("BackgroundTab: Данные фона имеют размер {}".format(img_data.shape))
         
         # Вычисляем координаты в миллиметрах (центрированные относительно нуля)
         height, width = img_data.shape
@@ -257,9 +260,21 @@ class BackgroundTab(QWidget):
         self.rms_x_label.setText("RMS X: {:.6f} мм".format(rms_x))
         self.rms_y_label.setText("RMS Y: {:.6f} мм".format(rms_y))
         
+        print("BackgroundTab: Графики фона успешно обновлены")
+        
     def update_tab(self):
         """
         Обновляет содержимое вкладки
         """
+        print("BackgroundTab: Обновление вкладки")
+        
+        # Явно проверяем наличие фона через image_reader
+        has_background = self.main_window.image_reader.background is not None
+        print("BackgroundTab.update_tab: has_background = {}".format(has_background))
+        
         self.update_camera_info()
-        self.update_plots()
+        if has_background:
+            print("BackgroundTab.update_tab: Вызываем update_plots, так как фон есть")
+            self.update_plots()
+        else:
+            print("BackgroundTab.update_tab: Пропускаем update_plots, так как фона нет")

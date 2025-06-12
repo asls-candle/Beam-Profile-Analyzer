@@ -299,17 +299,25 @@ class CameraTab(QWidget):
             self.stop_camera_btn.setEnabled(camera_connected)
             
             # Доступность элементов управления фоном
+            # Явно проверяем наличие фона в image_reader
             has_background = self.main_window.image_reader.background is not None
             is_collecting_bg = self.main_window.image_reader.is_collecting_background
+            
+            # Логирование состояния фона для отладки
+            print("CameraTab: has_background={}, is_collecting_bg={}".format(has_background, is_collecting_bg))
             
             self.bg_frames_spinbox.setEnabled(camera_connected and not is_collecting_bg)
             self.get_background_btn.setEnabled(camera_connected and not is_collecting_bg)
             self.stop_bg_collection_btn.setEnabled(camera_connected and is_collecting_bg)
             
             # Доступность элементов управления съемкой
-            self.start_capture_btn.setEnabled(camera_connected and has_background and not self.is_capturing)
+            can_start_capture = camera_connected and has_background and not self.is_capturing
+            self.start_capture_btn.setEnabled(can_start_capture)
             self.stop_capture_btn.setEnabled(camera_connected and self.is_capturing)
             self.export_data_btn.setEnabled(camera_connected and not self.is_capturing)
+            
+            # Логирование состояния кнопки Start
+            print("CameraTab: start_capture_btn.isEnabled={}".format(can_start_capture))
             
             # Обновление статуса камеры
             if camera_connected:
@@ -581,7 +589,10 @@ class CameraTab(QWidget):
         Обработчик нажатия кнопки запуска съемки
         """
         # Проверяем, что фон собран
-        if self.main_window.image_reader.background is None:
+        has_background = self.main_window.image_reader.background is not None
+        print("CameraTab.on_start_capture: has_background = {}".format(has_background))
+        
+        if not has_background:
             QMessageBox.warning(
                 self,
                 "Предупреждение",

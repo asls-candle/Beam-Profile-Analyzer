@@ -192,19 +192,29 @@ class ImageReader:
         self.is_collecting_background = False
         self._process_background_frames()
         
+        # Явное оповещение о наличии фона для UI
+        has_background = self.background is not None
+        print("pydc1394: Фон собран: {}".format(has_background))
+        
+        # Явно обновляем UI после сбора фона
+        print("pydc1394: Сигнализируем об обновлении UI после сбора фона")
+        
     def _process_background_frames(self):
         """
         Обрабатывает собранные кадры фона
         """
-        if not self.background_frames or len(self.background_frames) == 0:
+        if self.background_frames is None or (isinstance(self.background_frames, list) and len(self.background_frames) == 0):
+            print("pydc1394: Нет кадров для обработки фона")
             return
             
+        print("pydc1394: Обработка {} кадров фона".format(len(self.background_frames)))
         # Усредняем кадры фона
         raw_bg = ImageNormalizer.process_background(self.background_frames)
         
         with self.background_lock:
             self.raw_background = raw_bg
             self.background = ImageNormalizer.normalize(raw_bg)
+            print("pydc1394: Фон успешно создан, размер: {}".format(self.background.shape))
             
         # Вычисляем разницу с текущим кадром
         with self.frame_lock, self.background_lock:
@@ -213,3 +223,6 @@ class ImageReader:
                     diff = self.current_frame - self.background
                     diff[diff < 0] = 0
                     self.difference = diff
+                    print("pydc1394: Разница с текущим кадром вычислена")
+                else:
+                    print("pydc1394: Ошибка! Размеры не совпадают: текущий кадр {}, фон {}".format(self.current_frame.shape, self.background.shape))

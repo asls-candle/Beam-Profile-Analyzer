@@ -171,7 +171,23 @@ class MainWindow(QMainWindow):
         Returns:
             bool: True если остановка успешна, иначе False
         """
-        return self.image_reader.stop_background_collection()
+        result = self.image_reader.stop_background_collection()
+        
+        # Проверяем, что фон успешно собран
+        has_background = self.image_reader.background is not None
+        print("MainWindow: Фон собран: {}".format(has_background))
+        
+        # Принудительно обновляем все вкладки после сбора фона
+        print("MainWindow: Принудительное обновление всех вкладок после сбора фона")
+        self.camera_tab.update_tab()
+        self.background_tab.update_tab()
+        self.difference_tab.update_tab()
+        
+        # Переключаемся на вкладку фона для просмотра результата
+        print("MainWindow: Переключение на вкладку фона")
+        self.tabs.setCurrentWidget(self.background_tab)
+        
+        return result
         
     def get_current_data(self):
         """
