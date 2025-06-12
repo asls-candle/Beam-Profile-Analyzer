@@ -428,7 +428,7 @@ class MainWindow(QMainWindow):
             self,
             "Открыть файл",
             "",
-            "Файлы данных (*.mat);;Все файлы (*)"
+            "Файлы данных (*.mat *.csv);;CSV файлы (*.csv);;MAT файлы (*.mat);;Все файлы (*)"
         )
         
         if filepath:

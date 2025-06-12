@@ -2,6 +2,7 @@ import os
 import numpy as np
 import re
 import scipy.io as sio
+import pandas as pd
 
 import logging
 logger = logging.getLogger('data')
@@ -131,6 +132,198 @@ class DataImporter:
         except Exception as e:
             print("Ошибка при импорте MAT файла: {}".format(e))
             logger.error("Ошибка при импорте MAT файла: {}".format(e), exc_info=True)
+            return None
+    
+    @staticmethod
+    def import_csv(filepath, background_filepath=None):
+        """
+        Импортирует данные из CSV файла
+        
+        Args:
+            filepath: Путь к файлу
+            background_filepath: Путь к файлу с фоном (если None, пытается найти автоматически)
+            
+        Returns:
+            dict: Словарь с импортированными данными или None в случае ошибки
+        """
+        try:
+            logger.info("Начало импорта CSV файла: {}".format(filepath))
+            
+            # Читаем файл построчно для разбора метаданных и данных
+            with open(filepath, 'r') as f:
+                lines = f.readlines()
+            
+            # Словарь для хранения метаданных и данных
+            result_data = {}
+            
+            # Извлекаем метаданные
+            metadata_mode = False
+            data_mode = False
+            current_data_key = None
+            current_data_rows = []
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Проверяем маркеры секций
+                if line.startswith("# Metadata"):
+                    metadata_mode = True
+                    data_mode = False
+                    continue
+                elif line.startswith("# Data"):
+                    metadata_mode = False
+                    data_mode = True
+                    continue
+                elif line.startswith("# End of"):
+                    # Закончилась секция данных
+                    if current_data_key and current_data_rows:
+                        try:
+                            # Преобразуем строки в numpy массив
+                            data_array = np.array([[float(val) for val in row.split(',')] 
+                                                for row in current_data_rows])
+                            result_data[current_data_key] = data_array
+                        except Exception as e:
+                            logger.warning("Ошибка при преобразовании данных {}: {}".format(current_data_key, e))
+                    
+                    current_data_key = None
+                    current_data_rows = []
+                    continue
+                
+                # Обрабатываем метаданные
+                if metadata_mode and line.startswith("# "):
+                    parts = line[2:].split(',', 1)  # Разделяем только по первой запятой
+                    if len(parts) == 2:
+                        key, value = parts
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        # Если значение в кавычках, удаляем их
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                        
+                        # Пробуем преобразовать строковые значения в соответствующие типы
+                        try:
+                            if value.startswith('(') and value.endswith(')'):
+                                # Это кортеж
+                                value = eval(value)
+                            elif value.lower() == 'true':
+                                value = True
+                            elif value.lower() == 'false':
+                                value = False
+                            else:
+                                try:
+                                    value = float(value)
+                                    if value.is_integer():
+                                        value = int(value)
+                                except ValueError:
+                                    pass  # Оставляем как строку
+                        except Exception as e:
+                            logger.warning("Ошибка при преобразовании значения {}: {}".format(value, e))
+                        
+                        result_data[key] = value
+                
+                # Обрабатываем заголовки данных
+                elif data_mode and line.startswith("# "):
+                    parts = line[2:].split(',', 1)
+                    if len(parts) == 2:
+                        current_data_key = parts[0].strip()
+                        current_data_rows = []  # Сбрасываем буфер строк
+                
+                # Обрабатываем строки данных (не начинающиеся с #)
+                elif not line.startswith("#") and current_data_key:
+                    current_data_rows.append(line)
+            
+            # Обрабатываем последний блок данных, если он есть и не был завершен
+            if current_data_key and current_data_rows:
+                try:
+                    data_array = np.array([[float(val) for val in row.split(',')] 
+                                        for row in current_data_rows])
+                    result_data[current_data_key] = data_array
+                except Exception as e:
+                    logger.warning("Ошибка при преобразовании данных {}: {}".format(current_data_key, e))
+            
+            # Проверяем наличие необходимых данных
+            if 'shot' not in result_data or not isinstance(result_data['shot'], np.ndarray):
+                # Если нет ключа shot, но есть данные, пробуем использовать их
+                data_keys = [k for k, v in result_data.items() if isinstance(v, np.ndarray)]
+                if data_keys:
+                    result_data['shot'] = result_data[data_keys[0]]
+                    logger.info("Использование {} в качестве shot".format(data_keys[0]))
+                else:
+                    # Если не удалось найти данные, пробуем прочитать как обычный CSV
+                    logger.warning("Не найдены структурированные данные, пробуем прочитать как обычный CSV")
+                    try:
+                        data = pd.read_csv(filepath, header=None, comment='#').values
+                        result_data['shot'] = data
+                    except Exception as e:
+                        logger.error("Ошибка при чтении CSV как обычного файла: {}".format(e))
+                        return None
+            
+            # Если в результате нет фона, но указан путь к файлу с фоном, пробуем загрузить его
+            if 'background' not in result_data and background_filepath:
+                try:
+                    bg_data = DataImporter.import_csv(background_filepath)
+                    if bg_data and 'shot' in bg_data:
+                        result_data['background'] = bg_data['shot']
+                except Exception as e:
+                    logger.error("Ошибка при загрузке фона: {}".format(e))
+            
+            # Если всё еще нет фона, но есть shot, создаем нулевой фон
+            if 'background' not in result_data and 'shot' in result_data:
+                result_data['background'] = np.zeros_like(result_data['shot'])
+            
+            # Проверяем формат и размеры данных
+            if 'shot' in result_data and 'background' in result_data:
+                shot = result_data['shot']
+                background = result_data['background']
+                
+                # Проверяем совпадение размеров
+                if shot.shape != background.shape:
+                    logger.warning("Размеры снимка ({}) и фона ({}) не совпадают".format(shot.shape, background.shape))
+                    background = np.zeros_like(shot)
+                    result_data['background'] = background
+                
+                # Определяем камеру по размеру массива если не указана
+                if 'camera_name' not in result_data or 'resolution' not in result_data:
+                    logger.debug("Определение камеры по размеру массива: {}".format(shot.shape))
+                    camera_info = DataImporter._determine_camera_by_shape(shot.shape)
+                    result_data.update(camera_info)
+                
+                # Нормализуем данные
+                logger.debug("Начало нормализации данных снимка")
+                normalized_shot = DataImporter._normalize_array(shot)
+                logger.debug("Начало нормализации данных фона")
+                normalized_background = DataImporter._normalize_array(background)
+                
+                # Вычисляем разницу
+                logger.debug("Вычисление разницы между снимком и фоном")
+                difference = normalized_shot - normalized_background
+                difference[difference < 0] = 0
+                
+                # Добавляем нормализованные данные и разницу
+                result_data['shot'] = normalized_shot
+                result_data['background'] = normalized_background
+                result_data['difference'] = difference
+                result_data['raw_shot'] = shot
+                result_data['raw_background'] = background
+                
+                # Добавляем эти поля, чтобы избежать KeyError в UI
+                result_data['current_frame'] = normalized_shot
+                result_data['centroid'] = (0, 0)
+                result_data['rms'] = (0, 0)
+                result_data['filepath'] = filepath
+                
+                logger.info("Успешно импортирован CSV файл: {}".format(filepath))
+                return result_data
+            else:
+                logger.error("Не удалось извлечь необходимые данные из CSV файла")
+                return None
+                
+        except Exception as e:
+            print("Ошибка при импорте CSV файла: {}".format(e))
+            logger.error("Ошибка при импорте CSV файла: {}".format(e), exc_info=True)
             return None
             
     @staticmethod
@@ -317,6 +510,9 @@ class DataImporter:
             if ext.lower() == ".mat":
                 logger.debug("Выбран импорт MAT файла")
                 return DataImporter.import_mat(filepath)
+            elif ext.lower() == ".csv":
+                logger.debug("Выбран импорт CSV файла")
+                return DataImporter.import_csv(filepath)
             else:
                 print("Неподдерживаемый формат файла: {}".format(ext))
                 logger.error("Неподдерживаемый формат файла: {}".format(ext))
