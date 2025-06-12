@@ -83,67 +83,163 @@ class CameraManager:
         # Получаем список физически подключенных камер
         try:
             logger.info("Получение списка физически подключенных камер")
-            print("Получение списка физически подключенных камер")
+            print("pydc1394: Получение списка физически подключенных камер")
+            
+            # Логируем текущую конфигурацию CAMERAS
+            logger.info("Текущая конфигурация CAMERAS: %s", list(self.CAMERAS.keys()))
+            print("pydc1394: Текущая конфигурация CAMERAS: {}".format(list(self.CAMERAS.keys())))
+            
             context = Context()
             cameras = context.cameras
             
+            logger.info("Найдено физических камер: %d", len(cameras))
+            print("pydc1394: Найдено физических камер: {}".format(len(cameras)))
+            
             if not cameras:
                 logger.warning("Физические камеры не обнаружены, возвращаем список из конфигурации")
-                print("Физические камеры не обнаружены, возвращаем список из конфигурации")
+                print("pydc1394: Физические камеры не обнаружены, возвращаем список из конфигурации")
                 return list(self.CAMERAS.keys())
             
             # Создаем список имен камер на основе реальных устройств
             available_cameras = []
+            
+            # Словарь для отслеживания соответствия физических камер и имен из конфигурации
+            mapped_cameras = {}
+            
+            # Словарь для сопоставления GUID камер с камерами из конфигурации
+            # ключ - GUID камеры, значение - название камеры из предустановок
+            camera_guid_mapping = {
+                "49712223529985966": "GUN_YAG1",  # GUID первой камеры
+                "49712223529993805": "GUN_YAG2"   # GUID второй камеры
+            }
+            
             for i, cam in enumerate(cameras):
                 try:
                     # Пытаемся получить информацию о камере
                     logger.debug("Получение информации о камере %d: %s", i, cam)
+                    print("pydc1394: Получение информации о камере {}: {}".format(i, cam))
+                    
+                    # Проверяем, есть ли GUID камеры в нашем словаре сопоставления
+                    camera_guid = str(cam[0])
+                    logger.info("GUID камеры %d: %s", i, camera_guid)
+                    print("pydc1394: GUID камеры {}: {}".format(i, camera_guid))
+                    
+                    if camera_guid in camera_guid_mapping:
+                        # Если GUID есть в словаре, используем предустановленное имя
+                        camera_name = camera_guid_mapping[camera_guid]
+                        logger.info("Сопоставлена камера %d с предустановкой: %s", i, camera_name)
+                        print("pydc1394: Сопоставлена камера {} с предустановкой: {}".format(i, camera_name))
+                        mapped_cameras[camera_name] = True
+                        
+                        if camera_name not in available_cameras:
+                            available_cameras.append(camera_name)
+                            logger.info("Добавлена предустановленная камера в список доступных: %s", camera_name)
+                            print("pydc1394: Добавлена предустановленная камера в список доступных: {}".format(camera_name))
+                        
+                        # Пропускаем дальнейшие шаги обработки этой камеры
+                        continue
+                    
+                    # Если камера не сопоставлена по GUID, продолжаем стандартную обработку
                     camera = Camera(guid=cam[0])
                     vendor = camera.vendor.decode('utf-8', errors='replace') if isinstance(camera.vendor, bytes) else camera.vendor
                     model = camera.model.decode('utf-8', errors='replace') if isinstance(camera.model, bytes) else camera.model
                     
-                    # Создаем имя на основе информации о камере
-                    camera_name = "Camera_{}_{}_{}"
-                    camera_name = camera_name.format(i, vendor, model)
-                    logger.info("Обнаружена камера: %s", camera_name)
+                    logger.info("Камера %d - Vendor: %s, Model: %s", i, vendor, model)
+                    print("pydc1394: Камера {} - Vendor: {}, Model: {}".format(i, vendor, model))
                     
-                    # Добавляем информацию о камере в словарь CAMERAS, если её там еще нет
-                    if camera_name not in self.CAMERAS:
-                        try:
-                            width = camera.width
-                            height = camera.height
-                            self.CAMERAS[camera_name] = {
-                                "resolution": (width, height),
-                                "pixel_size_x": 0.01, # приблизительно, нужно уточнить для реальной камеры
-                                "pixel_size_y": 0.01, # приблизительно, нужно уточнить для реальной камеры
-                                "linux_name": str(cam)
-                            }
-                            logger.info("Добавлена новая камера в конфигурацию: %s, разрешение %dx%d", 
-                                       camera_name, width, height)
-                            print("Добавлена новая камера в конфигурацию: {}, разрешение {}x{}".format(
-                                camera_name, width, height))
-                        except AttributeError:
-                            # Если не удалось получить разрешение
-                            self.CAMERAS[camera_name] = {
-                                "resolution": (800, 600),  # стандартное разрешение
-                                "pixel_size_x": 0.01,
-                                "pixel_size_y": 0.01,
-                                "linux_name": str(cam)
-                            }
-                            logger.warning("Не удалось получить разрешение камеры %s, установлено стандартное значение", camera_name)
-                            print("Не удалось получить разрешение камеры {}, установлено стандартное значение".format(camera_name))
+                    # Проверяем, соответствует ли эта физическая камера одной из заранее настроенных
+                    # Проходим по всем предустановленным камерам
+                    matched_preset = None
+                    for preset_name, preset_info in self.CAMERAS.items():
+                        # Получаем linux_name из предустановки
+                        preset_linux_name = preset_info.get("linux_name", "")
+                        
+                        # Если linux_name содержится в информации о физической камере
+                        if preset_linux_name and preset_linux_name in str(cam):
+                            matched_preset = preset_name
+                            logger.info("Найдено соответствие: физическая камера %d соответствует предустановке %s", 
+                                      i, preset_name)
+                            print("pydc1394: Найдено соответствие: физическая камера {} соответствует предустановке {}".format(i, preset_name))
+                            mapped_cameras[preset_name] = True
+                            break
                     
-                    available_cameras.append(camera_name)
+                    # Если найдено соответствие с предустановкой, используем это имя
+                    if matched_preset:
+                        camera_name = matched_preset
+                    else:
+                        # Создаем имя на основе информации о камере
+                        camera_name = "Camera_{}_{}_{}"
+                        camera_name = camera_name.format(i, vendor, model)
+                        logger.info("Обнаружена новая камера без предустановки: %s", camera_name)
+                        print("pydc1394: Обнаружена новая камера без предустановки: {}".format(camera_name))
+                        
+                        # Добавляем информацию о камере в словарь CAMERAS, если её там еще нет
+                        if camera_name not in self.CAMERAS:
+                            try:
+                                width = camera.width
+                                height = camera.height
+                                self.CAMERAS[camera_name] = {
+                                    "resolution": (width, height),
+                                    "pixel_size_x": 0.01, # приблизительно, нужно уточнить для реальной камеры
+                                    "pixel_size_y": 0.01, # приблизительно, нужно уточнить для реальной камеры
+                                    "linux_name": str(cam)
+                                }
+                                logger.info("Добавлена новая камера в конфигурацию: %s, разрешение %dx%d", 
+                                           camera_name, width, height)
+                                print("pydc1394: Добавлена новая камера в конфигурацию: {}, разрешение {}x{}".format(
+                                    camera_name, width, height))
+                            except AttributeError:
+                                # Если не удалось получить разрешение
+                                self.CAMERAS[camera_name] = {
+                                    "resolution": (800, 600),  # стандартное разрешение
+                                    "pixel_size_x": 0.01,
+                                    "pixel_size_y": 0.01,
+                                    "linux_name": str(cam)
+                                }
+                                logger.warning("Не удалось получить разрешение камеры %s, установлено стандартное значение", camera_name)
+                                print("pydc1394: Не удалось получить разрешение камеры {}, установлено стандартное значение".format(camera_name))
+                    
+                    # Добавляем имя камеры в список доступных
+                    if camera_name not in available_cameras:
+                        available_cameras.append(camera_name)
+                        logger.info("Добавлена камера в список доступных: %s", camera_name)
+                        print("pydc1394: Добавлена камера в список доступных: {}".format(camera_name))
+                    else:
+                        logger.warning("Камера %s уже есть в списке доступных", camera_name)
+                        print("pydc1394: Камера {} уже есть в списке доступных".format(camera_name))
                     
                     # Закрываем соединение с камерой
-                    if hasattr(camera, 'stop_capture'):
-                        camera.stop_capture()
+                    try:
+                        if hasattr(camera, 'stop_capture'):
+                            camera.stop_capture()
+                    except Exception as e:
+                        logger.warning("Ошибка при остановке захвата для камеры %s: %s", camera_name, str(e))
+                        print("pydc1394: Ошибка при остановке захвата для камеры {}: {}".format(camera_name, str(e)))
+                    
                     del camera
                     
                 except Exception as e:
                     logger.error("Ошибка при получении информации о камере %d: %s", i, e, exc_info=True)
-                    print("Ошибка при получении информации о камере {}: {}".format(i, e))
-                    # Добавляем камеру с общим именем
+                    print("pydc1394: Ошибка при получении информации о камере {}: {}".format(i, e))
+                    
+                    # Проверяем, есть ли GUID камеры в нашем словаре сопоставления даже при ошибке
+                    camera_guid = str(cam[0])
+                    if camera_guid in camera_guid_mapping:
+                        # Если GUID есть в словаре, используем предустановленное имя
+                        camera_name = camera_guid_mapping[camera_guid]
+                        logger.info("Сопоставлена камера с ошибкой %d с предустановкой: %s", i, camera_name)
+                        print("pydc1394: Сопоставлена камера с ошибкой {} с предустановкой: {}".format(i, camera_name))
+                        mapped_cameras[camera_name] = True
+                        
+                        if camera_name not in available_cameras:
+                            available_cameras.append(camera_name)
+                            logger.info("Добавлена предустановленная камера в список доступных: %s", camera_name)
+                            print("pydc1394: Добавлена предустановленная камера в список доступных: {}".format(camera_name))
+                        
+                        # Пропускаем добавление дополнительного имени
+                        continue
+                    
+                    # Добавляем камеру с общим именем только если она не сопоставлена с предустановкой
                     camera_name = "Camera_{}".format(i)
                     if camera_name not in self.CAMERAS:
                         self.CAMERAS[camera_name] = {
@@ -153,22 +249,35 @@ class CameraManager:
                             "linux_name": str(cam)
                         }
                         logger.info("Добавлена камера с ограниченной информацией: %s", camera_name)
-                        print("Добавлена камера с ограниченной информацией: {}".format(camera_name))
-                    available_cameras.append(camera_name)
+                        print("pydc1394: Добавлена камера с ограниченной информацией: {}".format(camera_name))
+                    
+                    # Добавляем только если это не дубликат предустановленной камеры
+                    if camera_name not in available_cameras:
+                        available_cameras.append(camera_name)
+                        logger.info("Добавлена камера с ошибкой в список доступных: %s", camera_name)
+                        print("pydc1394: Добавлена камера с ошибкой в список доступных: {}".format(camera_name))
+            
+            # Добавляем предустановленные камеры, которые не были сопоставлены с физическими
+            unmapped_presets = [name for name in self.CAMERAS.keys() if name not in mapped_cameras 
+                              and name.startswith("GUN_YAG")]  # Фильтруем только стандартные камеры
+            
+            if unmapped_presets:
+                logger.info("Предустановленные камеры без физического соответствия: %s", unmapped_presets)
+                print("pydc1394: Предустановленные камеры без физического соответствия: {}".format(unmapped_presets))
             
             # Если не найдено ни одной камеры, вернем весь список из конфигурации
             if not available_cameras:
                 logger.warning("Физические камеры не обнаружены, возвращаем список из конфигурации")
-                print("Физические камеры не обнаружены, возвращаем список из конфигурации")
+                print("pydc1394: Физические камеры не обнаружены, возвращаем список из конфигурации")
                 return list(self.CAMERAS.keys())
             
-            logger.info("Найдено %d камер: %s", len(available_cameras), available_cameras)
-            print("Найдено {} камер: {}".format(len(available_cameras), available_cameras))
+            logger.info("Итоговый список камер (%d): %s", len(available_cameras), available_cameras)
+            print("pydc1394: Итоговый список камер ({}): {}".format(len(available_cameras), available_cameras))
             return available_cameras
             
         except Exception as e:
             logger.error("Ошибка при получении списка камер: %s", e, exc_info=True)
-            print("Ошибка при получении списка камер: {}".format(e))
+            print("pydc1394: Ошибка при получении списка камер: {}".format(e))
             return list(self.CAMERAS.keys())
     
     def get_camera_info(self, camera_name=None):
@@ -217,6 +326,7 @@ class CameraManager:
         try:
             with self.lock:
                 logger.info("Подключение к камере %s", camera_name)
+                print("pydc1394: Подключение к камере {}".format(camera_name))
                 
                 # Закрываем текущее соединение если есть
                 if self.camera is not None:
@@ -232,21 +342,54 @@ class CameraManager:
                     print("Камеры не найдены в системе")
                     return False
                 
-                # Ищем камеру по имени в Linux
-                linux_name = self.CAMERAS[camera_name]["linux_name"]
-                logger.debug("Поиск камеры с linux_name: %s", linux_name)
-                camera_found = False
-                cam_guid = None
+                # Словарь сопоставления имен камер с GUID
+                camera_name_to_guid = {
+                    "GUN_YAG1": "49712223529985966",
+                    "GUN_YAG2": "49712223529993805"
+                }
                 
-                for cam in cameras:
-                    # Проверяем соответствие имени камеры
-                    cam_info = str(cam)
-                    logger.debug("Проверка камеры: %s", cam_info)
-                    if linux_name in cam_info:
-                        cam_guid = cam[0]  # GUID находится в первом элементе кортежа
-                        camera_found = True
-                        logger.info("Найдена камера %s с GUID: %s", camera_name, cam_guid)
-                        break
+                # Проверяем, есть ли для выбранной камеры сопоставленный GUID
+                if camera_name in camera_name_to_guid:
+                    target_guid = camera_name_to_guid[camera_name]
+                    logger.info("Целевой GUID для камеры %s: %s", camera_name, target_guid)
+                    print("pydc1394: Целевой GUID для камеры {}: {}".format(camera_name, target_guid))
+                    
+                    # Ищем камеру по GUID
+                    camera_found = False
+                    cam_guid = None
+                    
+                    for cam in cameras:
+                        current_guid = str(cam[0])
+                        logger.debug("Проверка камеры с GUID: %s", current_guid)
+                        print("pydc1394: Проверка камеры с GUID: {}".format(current_guid))
+                        
+                        if current_guid == target_guid:
+                            cam_guid = cam[0]
+                            camera_found = True
+                            logger.info("Найдена камера %s с GUID: %s", camera_name, current_guid)
+                            print("pydc1394: Найдена камера {} с GUID: {}".format(camera_name, current_guid))
+                            break
+                else:
+                    # Если нет прямого сопоставления, ищем по linux_name как раньше
+                    linux_name = self.CAMERAS[camera_name]["linux_name"]
+                    logger.debug("Поиск камеры с linux_name: %s", linux_name)
+                    print("pydc1394: Поиск камеры с linux_name: {}".format(linux_name))
+                    
+                    camera_found = False
+                    cam_guid = None
+                    
+                    for cam in cameras:
+                        # Проверяем соответствие имени камеры
+                        cam_info = str(cam)
+                        logger.debug("Проверка камеры: %s", cam_info)
+                        print("pydc1394: Проверка камеры: {}".format(cam_info))
+                        
+                        if linux_name in cam_info:
+                            cam_guid = cam[0]  # GUID находится в первом элементе кортежа
+                            camera_found = True
+                            logger.info("Найдена камера %s с GUID: %s", camera_name, cam_guid)
+                            print("pydc1394: Найдена камера {} с GUID: {}".format(camera_name, cam_guid))
+                            break
                 
                 if not camera_found:
                     print("Камера {} не найдена в системе".format(camera_name))
@@ -413,13 +556,13 @@ class CameraManager:
                     # В режиме внешнего триггера ожидаем кадр
                     logger.info("Ожидание кадра по внешнему триггеру...")
                     print("Ожидание кадра по внешнему триггеру...")
-                    frame = self.camera.dequeue(timeout=5000)  # таймаут 5 секунд
+                    frame = self.camera.dequeue()  # Вызываем без таймаута
                 else:
                     # В режиме без триггера явно запускаем захват
                     logger.info("Запуск захвата одиночного кадра")
                     print("Запуск захвата одиночного кадра")
                     self.camera.start_one_shot()
-                    frame = self.camera.dequeue(timeout=2000)  # таймаут 2 секунды
+                    frame = self.camera.dequeue()  # Вызываем без таймаута
                 
                 # Копируем данные кадра
                 frame_data = frame.copy()
