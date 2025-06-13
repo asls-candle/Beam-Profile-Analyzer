@@ -105,8 +105,9 @@ class DataImporter:
             
             # Вычисляем разницу
             logger.debug("Вычисление разницы между снимком и фоном")
-            difference = normalized_shot - normalized_background
-            difference[difference < 0] = 0
+            raw_difference = shot - background
+            raw_difference[raw_difference < 0] = 0
+            difference = DataImporter._normalize_array(raw_difference)
             
             # Формируем результирующий словарь
             logger.debug("Формирование результирующего словаря с данными")
@@ -299,8 +300,9 @@ class DataImporter:
                 
                 # Вычисляем разницу
                 logger.debug("Вычисление разницы между снимком и фоном")
-                difference = normalized_shot - normalized_background
-                difference[difference < 0] = 0
+                raw_difference = shot - background
+                raw_difference[raw_difference < 0] = 0
+                difference = DataImporter._normalize_array(raw_difference)
                 
                 # Добавляем нормализованные данные и разницу
                 result_data['shot'] = normalized_shot
