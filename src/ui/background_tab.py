@@ -268,8 +268,12 @@ class BackgroundTab(QWidget):
         """
         print("BackgroundTab: Обновление вкладки")
         
-        # Явно проверяем наличие фона через image_reader
-        has_background = self.main_window.image_reader.background is not None
+        # Проверяем наличие фона в зависимости от режима
+        if self.main_window.current_mode == "camera":
+            has_background = self.main_window.image_reader.background is not None
+        else:
+            has_background = self.main_window.file_data["background"] is not None
+            
         print("BackgroundTab.update_tab: has_background = {}".format(has_background))
         
         self.update_camera_info()
