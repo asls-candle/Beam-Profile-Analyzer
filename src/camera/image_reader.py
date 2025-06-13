@@ -78,12 +78,11 @@ class ImageReader:
                     # Вычисляем разницу если есть фон
                     if self.background is not None:
                         # Проверяем совпадение размеров
-                        if self.raw_current_frame.shape == self.raw_background.shape:
-                            # Сначала вычитаем необработанные (raw) кадры
-                            raw_diff = self.raw_current_frame - self.raw_background
-                            raw_diff[raw_diff < 0] = 0
-                            # Затем нормализуем результат
-                            self.difference = ImageNormalizer.normalize(raw_diff)
+                        if self.current_frame.shape == self.background.shape:
+                            # Вычитаем фон и обрезаем отрицательные значения
+                            diff = self.current_frame - self.background
+                            diff[diff < 0] = 0
+                            self.difference = diff
                         else:
                             print("Размеры текущего кадра и фона не совпадают")
                 
@@ -219,13 +218,11 @@ class ImageReader:
             
         # Вычисляем разницу с текущим кадром
         with self.frame_lock, self.background_lock:
-            if self.raw_current_frame is not None and self.raw_background is not None:
-                if self.raw_current_frame.shape == self.raw_background.shape:
-                    # Сначала вычитаем необработанные (raw) кадры
-                    raw_diff = self.raw_current_frame - self.raw_background
-                    raw_diff[raw_diff < 0] = 0
-                    # Затем нормализуем результат
-                    self.difference = ImageNormalizer.normalize(raw_diff)
+            if self.current_frame is not None and self.background is not None:
+                if self.current_frame.shape == self.background.shape:
+                    diff = self.current_frame - self.background
+                    diff[diff < 0] = 0
+                    self.difference = diff
                     print("pydc1394: Разница с текущим кадром вычислена")
                 else:
-                    print("pydc1394: Ошибка! Размеры не совпадают: текущий кадр {}, фон {}".format(self.raw_current_frame.shape, self.raw_background.shape))
+                    print("pydc1394: Ошибка! Размеры не совпадают: текущий кадр {}, фон {}".format(self.current_frame.shape, self.background.shape))

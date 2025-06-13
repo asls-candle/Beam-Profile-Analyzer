@@ -103,11 +103,16 @@ class DataImporter:
             logger.debug("Начало нормализации данных фона")
             normalized_background = DataImporter._normalize_array(background)
             
-            # Вычисляем разницу
-            logger.debug("Вычисление разницы между снимком и фоном")
-            raw_difference = shot - background
-            raw_difference[raw_difference < 0] = 0
-            difference = DataImporter._normalize_array(raw_difference)
+            # Вычитаем фон если он есть
+            if background is not None:
+                # Проверяем совпадение размеров
+                if normalized_shot.shape == normalized_background.shape:
+                    # Вычитаем фон и обрезаем отрицательные значения
+                    difference = normalized_shot - normalized_background
+                    difference[difference < 0] = 0
+                else:
+                    print("Размеры снимка и фона не совпадают")
+                    difference = None
             
             # Формируем результирующий словарь
             logger.debug("Формирование результирующего словаря с данными")
@@ -298,11 +303,19 @@ class DataImporter:
                 logger.debug("Начало нормализации данных фона")
                 normalized_background = DataImporter._normalize_array(background)
                 
-                # Вычисляем разницу
-                logger.debug("Вычисление разницы между снимком и фоном")
-                raw_difference = shot - background
-                raw_difference[raw_difference < 0] = 0
-                difference = DataImporter._normalize_array(raw_difference)
+                # Вычитаем фон если он есть
+                if background is not None:
+                    # Проверяем совпадение размеров
+                    if shot.shape == background.shape:
+                        # Сначала нормализуем оба массива
+                        normalized_shot = DataImporter._normalize_array(shot)
+                        normalized_background = DataImporter._normalize_array(background)
+                        # Вычитаем фон и обрезаем отрицательные значения
+                        difference = normalized_shot - normalized_background
+                        difference[difference < 0] = 0
+                    else:
+                        print("Размеры снимка и фона не совпадают")
+                        difference = None
                 
                 # Добавляем нормализованные данные и разницу
                 result_data['shot'] = normalized_shot
