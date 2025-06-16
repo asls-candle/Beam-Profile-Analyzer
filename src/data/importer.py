@@ -156,7 +156,7 @@ class DataImporter:
             logger.info("Начало импорта CSV файла: {}".format(filepath))
             
             # Читаем файл построчно для разбора метаданных и данных
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             
             # Словарь для хранения метаданных и данных
