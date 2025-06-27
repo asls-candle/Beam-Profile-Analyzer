@@ -15,42 +15,45 @@ class DataExporter:
     @staticmethod
     def export_csv(filepath, data_dict):
         """
-        Экспортирует данные в формате CSV
+        Экспортирует данные в формате JSON для метаданных и отдельных CSV файлов для каждого массива
         
         Args:
-            filepath: Путь для сохранения файла
+            filepath: Базовый путь для сохранения файлов
             data_dict: Словарь с данными для экспорта
             
         Returns:
             bool: True если экспорт успешен, иначе False
         """
         try:
-            # Создаем директорию, если ее нет
-            dir_path = os.path.dirname(filepath)
-            if dir_path:
-                try:
-                    os.makedirs(dir_path)
-                except OSError:
-                    if not os.path.isdir(dir_path):
-                        raise
+            # Создаем директорию для файлов если ее нет
+            base_dir = os.path.dirname(filepath)
+            if base_dir:
+                os.makedirs(base_dir, exist_ok=True)
             
-            # Информационная часть (метаданные)
-            with open(filepath, 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                
-                # Записываем метаданные
-                writer.writerow(["# Metadata"])
-                for key, value in data_dict.items():
-                    if not isinstance(value, np.ndarray):
-                        writer.writerow(["# {}".format(key), value])
-                
-                writer.writerow(["# Data"])
-                
-                # Записываем массивы данных
-                for key, value in data_dict.items():
-                    if isinstance(value, np.ndarray):
-                        # Добавляем заголовок для массива
-                        writer.writerow(["# {}".format(key), value.shape])
+            # Получаем базовое имя файла без расширения
+            base_filename = os.path.splitext(os.path.basename(filepath))[0]
+            
+            # Создаем словарь с метаданными (все, кроме массивов)
+            metadata = {}
+            for key, value in data_dict.items():
+                if not isinstance(value, np.ndarray):
+                    metadata[key] = value
+            
+            # Экспортируем метаданные в JSON
+            json_path = os.path.join(base_dir, f"{base_filename}_metadata.json")
+            with open(json_path, 'w', encoding='utf-8') as jsonfile:
+                json.dump(metadata, jsonfile, indent=4, default=str)
+            
+            # Экспортируем массивы в отдельные CSV файлы
+            for key, value in data_dict.items():
+                if isinstance(value, np.ndarray):
+                    array_path = os.path.join(base_dir, f"{base_filename}_{key}.csv")
+                    with open(array_path, 'w', newline='') as csvfile:
+                        writer = csv.writer(csvfile)
+                        
+                        # Записываем информацию о массиве
+                        writer.writerow(["# Array", key])
+                        writer.writerow(["# Shape", str(value.shape)])
                         
                         # Записываем данные массива с 7 знаками после запятой
                         if value.ndim == 2:  # Для двумерных массивов
@@ -58,12 +61,12 @@ class DataExporter:
                                 writer.writerow(["{:.7f}".format(x) for x in row])
                         else:  # Для других размерностей
                             writer.writerow(["{:.7f}".format(x) for x in value.flatten()])
-                        
-                        writer.writerow(["# End of", key])
-                        
+            
+            print(f"Экспортированы: метаданные в {json_path} и массивы в отдельные CSV файлы.")
             return True
+            
         except Exception as e:
-            print("Ошибка при экспорте CSV файла: {}".format(e))
+            print("Ошибка при экспорте файлов: {}".format(e))
             return False
     
     @staticmethod

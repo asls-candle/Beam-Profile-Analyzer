@@ -3,6 +3,7 @@ import numpy as np
 import re
 import scipy.io as sio
 import pandas as pd
+import json
 
 import logging
 logger = logging.getLogger('data')
@@ -506,9 +507,116 @@ class DataImporter:
         return normalized
 
     @staticmethod
+    def import_multifile_csv(metadata_filepath):
+        """
+        Импортирует данные из набора файлов: JSON метаданные и отдельные CSV файлы для массивов
+        
+        Args:
+            metadata_filepath: Путь к JSON файлу с метаданными
+            
+        Returns:
+            dict: Словарь с импортированными данными или None в случае ошибки
+        """
+        try:
+            logger.info("Начало импорта данных из JSON и CSV файлов: {}".format(metadata_filepath))
+            
+            if not os.path.exists(metadata_filepath):
+                print(f"Файл метаданных не найден: {metadata_filepath}")
+                logger.error(f"Файл метаданных не найден: {metadata_filepath}")
+                return None
+                
+            # Загружаем метаданные из JSON
+            with open(metadata_filepath, 'r', encoding='utf-8') as f:
+                result_data = json.load(f)
+                
+            # Определяем базовый путь и имя для поиска файлов массивов
+            base_dir = os.path.dirname(metadata_filepath)
+            base_filename = os.path.splitext(os.path.basename(metadata_filepath))[0]
+            base_filename = base_filename.replace('_metadata', '')  # Удаляем суффикс _metadata, если есть
+            
+            # Ищем файлы с массивами (shot, background, difference и другие)
+            expected_arrays = ['shot', 'background', 'difference']
+            
+            for array_name in expected_arrays:
+                array_path = os.path.join(base_dir, f"{base_filename}_{array_name}.csv")
+                
+                if not os.path.exists(array_path):
+                    logger.warning(f"Файл массива не найден: {array_path}")
+                    continue
+                    
+                # Импортируем массив из CSV
+                try:
+                    # Читаем файл построчно
+                    with open(array_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                    
+                    # Пропускаем строки с комментариями (# в начале)
+                    data_rows = []
+                    for line in lines:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            data_rows.append(line)
+                    
+                    # Преобразуем строки в numpy массив
+                    if data_rows:
+                        try:
+                            # Сначала пытаемся разделить по запятой (CSV)
+                            data_array = np.array([[float(val) for val in row.split(',')] 
+                                                for row in data_rows])
+                            result_data[array_name] = data_array
+                            logger.info(f"Успешно импортирован массив: {array_name}, форма: {data_array.shape}")
+                        except ValueError:
+                            # Если не получилось, пробуем по пробелам
+                            try:
+                                data_array = np.array([[float(val) for val in row.split()] 
+                                                    for row in data_rows])
+                                result_data[array_name] = data_array
+                                logger.info(f"Успешно импортирован массив: {array_name}, форма: {data_array.shape}")
+                            except Exception as e:
+                                logger.error(f"Не удалось разобрать данные в файле {array_path}: {e}")
+                except Exception as e:
+                    logger.error(f"Ошибка при чтении файла {array_path}: {e}")
+            
+            # Проверяем наличие необходимых массивов
+            if 'shot' not in result_data or 'background' not in result_data:
+                logger.error("Не найдены необходимые массивы данных (shot и/или background)")
+                return None
+                
+            # Проверяем совпадение размеров массивов
+            if result_data['shot'].shape != result_data['background'].shape:
+                logger.error(f"Размеры массивов shot и background не совпадают: "
+                           f"{result_data['shot'].shape} vs {result_data['background'].shape}")
+                return None
+                
+            # Добавляем разность, если её нет
+            if 'difference' not in result_data:
+                difference = result_data['shot'] - result_data['background']
+                difference[difference < 0] = 0
+                result_data['difference'] = difference
+                logger.info("Автоматически рассчитана разность shot - background")
+            
+            # Добавляем дополнительные поля, если их нет
+            if 'current_frame' not in result_data:
+                result_data['current_frame'] = result_data['shot']
+            if 'centroid' not in result_data:
+                result_data['centroid'] = (0, 0)
+            if 'rms' not in result_data:
+                result_data['rms'] = (0, 0)
+            if 'filepath' not in result_data:
+                result_data['filepath'] = metadata_filepath
+            
+            logger.info(f"Успешно импортированы данные из набора файлов: {metadata_filepath}")
+            return result_data
+            
+        except Exception as e:
+            print(f"Ошибка при импорте данных из JSON и CSV файлов: {e}")
+            logger.error(f"Ошибка при импорте данных из JSON и CSV файлов: {e}", exc_info=True)
+            return None
+            
+    @staticmethod
     def import_data(filepath):
         """
-        Импортирует данные из файла на основе его расширения
+        Импортирует данные из файла, определяя его тип
         
         Args:
             filepath: Путь к файлу
@@ -516,23 +624,18 @@ class DataImporter:
         Returns:
             dict: Словарь с импортированными данными или None в случае ошибки
         """
-        try:
-            logger.info("Импорт данных из файла: {}".format(filepath))
-            # Определяем формат по расширению
-            _, ext = os.path.splitext(filepath)
-            logger.debug("Определено расширение файла: {}".format(ext))
+        if not os.path.exists(filepath):
+            print("Файл не найден: {}".format(filepath))
+            return None
             
-            if ext.lower() == ".mat":
-                logger.debug("Выбран импорт MAT файла")
-                return DataImporter.import_mat(filepath)
-            elif ext.lower() == ".csv":
-                logger.debug("Выбран импорт CSV файла")
-                return DataImporter.import_csv(filepath)
-            else:
-                print("Неподдерживаемый формат файла: {}".format(ext))
-                logger.error("Неподдерживаемый формат файла: {}".format(ext))
-                return None
-        except Exception as e:
-            print("Ошибка при импорте данных: {}".format(e))
-            logger.error("Ошибка при импорте данных: {}".format(e), exc_info=True)
+        file_ext = os.path.splitext(filepath)[1].lower()
+        
+        if file_ext == '.mat':
+            return DataImporter.import_mat(filepath)
+        elif file_ext == '.csv':
+            return DataImporter.import_csv(filepath)
+        elif file_ext == '.json' and '_metadata' in filepath:
+            return DataImporter.import_multifile_csv(filepath)
+        else:
+            print("Неподдерживаемый формат файла: {}".format(file_ext))
             return None
