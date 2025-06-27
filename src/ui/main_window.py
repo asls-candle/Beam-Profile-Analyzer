@@ -15,21 +15,21 @@ from src.data.importer import DataImporter
 
 class MainWindow(QMainWindow):
     """
-    Главное окно приложения Beam Profile Analyzer
+    Main window of the Beam Profile Analyzer application
     """
     def __init__(self):
         super().__init__()
         
-        # Инициализация менеджеров и анализаторов
+        # Initialization of managers and analyzers
         self.camera_manager = CameraManager()
         self.image_reader = ImageReader(self.camera_manager)
         self.image_analyzer = ImageAnalyzer()
         self.plot_manager = PlotManager()
         
-        # Настройки приложения
+        # Application settings
         self.settings = QSettings("BeamProfileAnalyzer", "BeamProfileAnalyzer")
         
-        # Буферы данных для разных режимов
+        # Data buffers for different modes
         self.camera_data = {
             "current_frame": None,
             "background": None,
@@ -47,163 +47,163 @@ class MainWindow(QMainWindow):
             "filepath": None
         }
         
-        # Режим работы (camera или file)
+        # Operation mode (camera or file)
         self.current_mode = "camera"
         
-        # Настройка UI
-        self.setWindowTitle("Анализатор профиля пучка")
+        # UI setup
+        self.setWindowTitle("Beam Profile Analyzer")
         self.resize(1200, 800)
         
-        # Создание вкладок
+        # Creating tabs
         self.tabs = QTabWidget()
         self.camera_tab = CameraTab(self)
         self.background_tab = BackgroundTab(self)
         self.difference_tab = DifferenceTab(self)
         
-        # Добавление вкладок в контейнер
-        self.tabs.addTab(self.camera_tab, "Основная съемка")
-        self.tabs.addTab(self.background_tab, "Фон")
-        self.tabs.addTab(self.difference_tab, "Разность")
+        # Adding tabs to the container
+        self.tabs.addTab(self.camera_tab, "Main Capture")
+        self.tabs.addTab(self.background_tab, "Background")
+        self.tabs.addTab(self.difference_tab, "Difference")
         
-        # Установка центрального виджета
+        # Setting the central widget
         central_widget = QWidget()
         layout = QVBoxLayout(central_widget)
         layout.addWidget(self.tabs)
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
         
-        # Соединение сигналов
+        # Connecting signals
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
     def on_tab_changed(self, index):
         """
-        Обработчик смены вкладки
+        Handler for tab change
         
         Args:
-            index: Индекс новой вкладки
+            index: Index of the new tab
         """
-        # Обновляем только активную вкладку
+        # Update only the active tab
         active_tab = self.tabs.widget(index)
         active_tab.update_tab()
         
-        # Останавливаем таймеры обновления в неактивных вкладках
+        # Stop update timers in inactive tabs
         for i in range(self.tabs.count()):
             if i != index:
                 tab = self.tabs.widget(i)
                 if hasattr(tab, 'update_timer'):
                     tab.update_timer.stop()
         
-        # Запускаем таймер обновления только активной вкладки
+        # Start the update timer only for the active tab
         if hasattr(active_tab, 'update_timer'):
-            active_tab.update_timer.start(1000)  # Увеличиваем интервал до 1 секунды
+            active_tab.update_timer.start(1000)  # Increase interval to 1 second
         
     def switch_mode(self, mode):
         """
-        Переключает режим работы приложения
+        Switches the application operation mode
         
         Args:
-            mode: Режим работы ("camera" или "file")
+            mode: Operation mode ("camera" or "file")
         """
         if mode not in ["camera", "file"]:
             return
             
         self.current_mode = mode
         
-        # Обновляем все вкладки
+        # Update all tabs
         self.camera_tab.update_tab()
         self.background_tab.update_tab()
         self.difference_tab.update_tab()
         
     def connect_to_camera(self, camera_name):
         """
-        Подключается к выбранной камере
+        Connects to the selected camera
         
         Args:
-            camera_name: Имя камеры
+            camera_name: Camera name
             
         Returns:
-            bool: True если подключение успешно, иначе False
+            bool: True if connection successful, False otherwise
         """
-        # Отключаемся от текущей камеры если есть
+        # Disconnect from the current camera if any
         self.disconnect_camera()
         
-        # Подключаемся к выбранной камере
+        # Connect to the selected camera
         result = self.camera_manager.connect_to_camera(camera_name)
         
         if result:
-            # Запускаем предварительный просмотр
+            # Start preview
             self.image_reader.start_preview()
             
-            # Переключаемся в режим работы с камерой
+            # Switch to camera mode
             self.switch_mode("camera")
             
         return result
         
     def disconnect_camera(self):
         """
-        Отключается от камеры
+        Disconnects from the camera
         
         Returns:
-            bool: True если отключение успешно, иначе False
+            bool: True if disconnection successful, False otherwise
         """
-        # Останавливаем предварительный просмотр
+        # Stop preview
         self.image_reader.stop_preview()
         
-        # Отключаемся от камеры
+        # Disconnect from camera
         return self.camera_manager.disconnect_camera()
         
     def start_background_collection(self, frames_count=40):
         """
-        Запускает сбор кадров для фона
+        Starts collecting frames for background
         
         Args:
-            frames_count: Количество кадров для сбора
+            frames_count: Number of frames to collect
             
         Returns:
-            bool: True если запуск успешен, иначе False
+            bool: True if start successful, False otherwise
         """
         return self.image_reader.start_background_collection(frames_count)
         
     def stop_background_collection(self):
         """
-        Останавливает сбор кадров для фона
+        Stops collecting frames for background
         
         Returns:
-            bool: True если остановка успешна, иначе False
+            bool: True if stop successful, False otherwise
         """
         result = self.image_reader.stop_background_collection()
         
-        # Проверяем, что фон успешно собран
+        # Check if background was successfully collected
         has_background = self.image_reader.background is not None
-        print("MainWindow: Фон собран: {}".format(has_background))
+        print("MainWindow: Background collected: {}".format(has_background))
         
-        # Принудительно обновляем все вкладки после сбора фона
-        print("MainWindow: Принудительное обновление всех вкладок после сбора фона")
+        # Force update all tabs after background collection
+        print("MainWindow: Forcing update of all tabs after background collection")
         self.camera_tab.update_tab()
         self.background_tab.update_tab()
         self.difference_tab.update_tab()
         
-        # Переключаемся на вкладку фона для просмотра результата
-        print("MainWindow: Переключение на вкладку фона")
+        # Switch to background tab to view result
+        print("MainWindow: Switching to background tab")
         self.tabs.setCurrentWidget(self.background_tab)
         
         return result
         
     def get_current_data(self):
         """
-        Возвращает текущие данные в зависимости от режима работы
+        Returns current data depending on the operation mode
         
         Returns:
-            dict: Словарь с текущими данными
+            dict: Dictionary with current data
         """
-        # Обновляем данные если в режиме камеры
+        # Update data if in camera mode
         if self.current_mode == "camera":
-            # Получаем текущий кадр
+            # Get current frame
             self.camera_data["current_frame"] = self.image_reader.get_current_frame()
             self.camera_data["background"] = self.image_reader.get_background()
             self.camera_data["difference"] = self.image_reader.get_difference()
             
-            # Если есть текущий кадр, вычисляем центроид и RMS
+            # If there is a current frame, calculate centroid and RMS
             if self.camera_data["current_frame"] is not None:
                 camera_info = self.camera_manager.get_camera_info()
                 if camera_info:
@@ -224,16 +224,15 @@ class MainWindow(QMainWindow):
             
             return self.camera_data
         else:
-            # В режиме файла данные статичны, поэтому нет необходимости 
-            # повторно вычислять центроид и RMS
+            # In file mode, data is static, so no need to recalculate centroid and RMS
             return self.file_data
             
     def get_camera_info(self):
         """
-        Возвращает информацию о текущей камере
+        Returns camera information
         
         Returns:
-            dict: Информация о камере или None если камера не выбрана
+            dict: Camera information or None if camera is not selected
         """
         if self.current_mode == "camera":
             if self.camera_manager.is_connected:
@@ -241,37 +240,37 @@ class MainWindow(QMainWindow):
             else:
                 return None
         else:
-            # В режиме чтения файла берем информацию из данных файла
+            # In file mode, get information from file data
             if self.file_data["current_frame"] is not None:
                 return {
                     "resolution": self.file_data.get("resolution", (0, 0)),
                     "pixel_size_x": self.file_data.get("pixel_size_x", 0),
                     "pixel_size_y": self.file_data.get("pixel_size_y", 0),
-                    "camera_name": self.file_data.get("camera_name", "Неизвестная камера")
+                    "camera_name": self.file_data.get("camera_name", "Unknown camera")
                 }
             return None
             
     def export_data(self, filepath, export_format="csv"):
         """
-        Экспортирует данные в указанном формате
+        Exports data to the specified format
         
         Args:
-            filepath: Путь для сохранения файла/директории
-            export_format: Формат экспорта ("csv", "png")
+            filepath: Path to save file/directory
+            export_format: Export format ("csv", "png")
             
         Returns:
-            bool: True если экспорт успешен, иначе False
+            bool: True if export successful, False otherwise
         """
-        # Получаем текущие данные
+        # Get current data
         data = self.get_current_data()
         camera_info = self.get_camera_info()
         
-        # Если нет данных или информации о камере
+        # If there is no data or camera information
         if data["current_frame"] is None or camera_info is None:
-            QMessageBox.warning(self, "Предупреждение", "Нет данных для экспорта")
+            QMessageBox.warning(self, "Warning", "No data to export")
             return False
             
-        # Формируем словарь для экспорта
+        # Form export dictionary
         export_data = {
             "shot": data["current_frame"],
             "background": data["background"],
@@ -283,31 +282,31 @@ class MainWindow(QMainWindow):
             "resolution": camera_info["resolution"],
             "pixel_size_x": camera_info["pixel_size_x"],
             "pixel_size_y": camera_info["pixel_size_y"],
-            "camera_name": camera_info.get("camera_name", "Неизвестная камера")
+            "camera_name": camera_info.get("camera_name", "Unknown camera")
         }
         
-        # Экспортируем данные
+        # Export data
         result = DataExporter.export_data(filepath, export_data, export_format, self.plot_manager)
         
         if result:
-            QMessageBox.information(self, "Информация", "Данные успешно экспортированы в {}".format(filepath))
+            QMessageBox.information(self, "Information", "Data successfully exported to {}".format(filepath))
         else:
-            QMessageBox.warning(self, "Предупреждение", "Ошибка при экспорте данных")
+            QMessageBox.warning(self, "Warning", "Error exporting data")
             
         return result
         
     def import_data(self, filepath):
         """
-        Импортирует данные из файла
+        Imports data from a file
         
         Args:
-            filepath: Путь к файлу
+            filepath: Path to file
             
         Returns:
-            bool: True если импорт успешен, иначе False
+            bool: True if import successful, False otherwise
         """
         try:
-            # Останавливаем таймеры обновления во всех вкладках
+            # Stop update timers in all tabs
             if hasattr(self, 'camera_tab') and self.camera_tab:
                 self.camera_tab.update_timer.stop()
             if hasattr(self, 'background_tab') and self.background_tab:
@@ -315,17 +314,17 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'difference_tab') and self.difference_tab:
                 self.difference_tab.update_timer.stop()
             
-            # Импортируем данные
+            # Import data
             data = DataImporter.import_data(filepath)
             
             if data is None:
-                QMessageBox.critical(self, "Ошибка", "Не удалось импортировать файл: {}".format(filepath))
+                QMessageBox.critical(self, "Error", "Failed to import file: {}".format(filepath))
                 return False
             
-            # Переключаемся в режим чтения файла
+            # Switch to file mode
             self.current_mode = "file"
             
-            # Инициализируем file_data с базовой структурой во избежание KeyError
+            # Initialize file_data with basic structure to avoid KeyError
             self.file_data = {
                 "shot": None,
                 "background": None,
@@ -336,25 +335,25 @@ class MainWindow(QMainWindow):
                 "resolution": (0, 0),
                 "pixel_size_x": 1.0,
                 "pixel_size_y": 1.0,
-                "camera_name": "Неизвестная камера",
+                "camera_name": "Unknown camera",
                 "centroid": (0, 0),
                 "rms": (0, 0),
                 "filepath": filepath
             }
             
-            # Обновляем данные из импортированного словаря
+            # Update data from imported dictionary
             self.file_data.update(data)
             
-            # Копируем shot в current_frame, так как вкладка camera использует ключ current_frame
+            # Copy shot to current_frame, since camera tab uses current_frame key
             if "shot" in data and data["shot"] is not None:
                 self.file_data["current_frame"] = data["shot"]
             
-            # Получаем размеры пикселя из данных
+            # Get pixel size from data
             pixel_size_x = self.file_data.get("pixel_size_x", 1)
             pixel_size_y = self.file_data.get("pixel_size_y", 1)
             
             try:
-                # Вычисляем центроид и RMS для основного изображения
+                # Calculate centroid and RMS for main image
                 if self.file_data["current_frame"] is not None:
                     self.file_data["centroid"] = self.image_analyzer.calculate_centroid(
                         self.file_data["current_frame"],
@@ -368,7 +367,7 @@ class MainWindow(QMainWindow):
                         pixel_size_y
                     )
                 
-                # Вычисляем центроид и RMS для фонового изображения
+                # Calculate centroid and RMS for background image
                 if self.file_data["background"] is not None:
                     self.file_data["background_centroid"] = self.image_analyzer.calculate_centroid(
                         self.file_data["background"],
@@ -382,7 +381,7 @@ class MainWindow(QMainWindow):
                         pixel_size_y
                     )
                 
-                # Вычисляем центроид и RMS для разницы изображений
+                # Calculate centroid and RMS for image difference
                 if self.file_data["difference"] is not None:
                     self.file_data["difference_centroid"] = self.image_analyzer.calculate_centroid(
                         self.file_data["difference"],
@@ -396,18 +395,18 @@ class MainWindow(QMainWindow):
                         pixel_size_y
                     )
             except Exception as e:
-                # Ошибка при вычислениях не должна прервать загрузку файла,
-                # но должна быть залогирована и показана пользователю
-                print("Ошибка при вычислении параметров: {}".format(e))
-                QMessageBox.warning(self, "Предупреждение", 
-                                   "Файл загружен, но не удалось вычислить параметры: {}".format(str(e)))
+                # Error in calculations should not interrupt file load,
+                # but should be logged and shown to user
+                print("Error in calculation parameters: {}".format(e))
+                QMessageBox.warning(self, "Warning", 
+                                   "File loaded, but unable to calculate parameters: {}".format(str(e)))
             
-            # Обновляем все вкладки
+            # Update all tabs
             self.camera_tab.update_tab()
             self.background_tab.update_tab()
             self.difference_tab.update_tab()
             
-            # Запускаем таймеры обновления
+            # Start update timers
             if hasattr(self, 'camera_tab') and self.camera_tab:
                 self.camera_tab.update_timer.start(500)
             if hasattr(self, 'background_tab') and self.background_tab:
@@ -418,7 +417,7 @@ class MainWindow(QMainWindow):
             return True
         
         except Exception as e:
-            # В случае ошибки также восстанавливаем таймеры
+            # In case of error, also restore timers
             if hasattr(self, 'camera_tab') and self.camera_tab:
                 self.camera_tab.update_timer.start(500)
             if hasattr(self, 'background_tab') and self.background_tab:
@@ -426,25 +425,25 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'difference_tab') and self.difference_tab:
                 self.difference_tab.update_timer.start(500)
             
-            # Показываем подробное сообщение об ошибке
-            error_message = "Ошибка при импорте файла {}:\n{}".format(filepath, str(e))
+            # Show detailed error message
+            error_message = "Error importing file {}:\n{}".format(filepath, str(e))
             print(error_message)
-            QMessageBox.critical(self, "Ошибка импорта", error_message)
+            QMessageBox.critical(self, "Import Error", error_message)
             
             return False
         
     def open_file_dialog(self):
         """
-        Открывает диалог выбора файла для импорта
+        Opens file selection dialog for import
         
         Returns:
-            bool: True если файл выбран и импортирован, иначе False
+            bool: True if file selected and imported, False otherwise
         """
         filepath, _ = QFileDialog.getOpenFileName(
             self,
-            "Открыть файл",
+            "Open file",
             "",
-            "Файлы данных (*.mat *.csv);;CSV файлы (*.csv);;MAT файлы (*.mat);;Все файлы (*)"
+            "Data files (*.mat *.csv);;CSV files (*.csv);;MAT files (*.mat);;All files (*)"
         )
         
         if filepath:
@@ -454,30 +453,30 @@ class MainWindow(QMainWindow):
         
     def save_file_dialog(self, default_format="csv"):
         """
-        Открывает диалог сохранения файла для экспорта
+        Opens file save dialog for export
         
         Args:
-            default_format: Формат экспорта по умолчанию ("csv", "png")
+            default_format: Default export format ("csv", "png")
             
         Returns:
-            bool: True если данные успешно экспортированы, иначе False
+            bool: True if data successfully exported, False otherwise
         """
-        # Форматы и фильтры
+        # Formats and filters
         formats = {
-            "csv": "CSV файлы (*.csv)",
-            "png": "PNG изображения (папка)"
+            "csv": "CSV files (*.csv)",
+            "png": "PNG images (folder)"
         }
         
-        # Строка фильтров
+        # Filter string
         filter_str = ";;".join(formats.values())
         
-        # Выбираем формат по умолчанию
+        # Select default format
         default_filter = formats.get(default_format, formats["csv"])
         
-        # Открываем диалог сохранения
+        # Open save dialog
         filepath, selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Сохранить данные",
+            "Save data",
             "",
             filter_str,
             default_filter
@@ -486,7 +485,7 @@ class MainWindow(QMainWindow):
         if not filepath:
             return False
             
-        # Определяем выбранный формат
+        # Determine selected format
         export_format = None
         for fmt, filter_name in formats.items():
             if filter_name == selected_filter:
@@ -496,24 +495,24 @@ class MainWindow(QMainWindow):
         if export_format is None:
             export_format = default_format
             
-        # Добавляем расширение если его нет
+        # Add extension if it's missing
         if export_format != "png" and not filepath.endswith(".{}".format(export_format)):
             filepath += ".{}".format(export_format)
             
-        # Экспортируем данные
+        # Export data
         return self.export_data(filepath, export_format)
         
     def closeEvent(self, event):
         """
-        Обработчик закрытия окна
+        Handler for window close
         
         Args:
-            event: Объект события
+            event: Event object
         """
-        # Отключаемся от камеры
+        # Disconnect from camera
         self.disconnect_camera()
         
-        # Сохраняем настройки
+        # Save settings
         self.settings.sync()
         
         event.accept()

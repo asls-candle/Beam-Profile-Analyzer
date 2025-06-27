@@ -14,130 +14,130 @@ from src.ui.constants import TOP_PANEL_HEIGHT, BUTTON_MIN_WIDTH, BUTTON_MIN_HEIG
 
 class CameraTab(QWidget):
     """
-    Вкладка для основной съемки и управления камерой
+    Tab for main capture and camera control
     """
     def __init__(self, main_window):
         super().__init__()
         
         self.main_window = main_window
         
-        # Флаги состояния
+        # Status flags
         self.is_capturing = False
         
-        # Для отслеживания изменений данных
+        # For tracking data changes
         self.last_data_hash = None
         
-        # Таймер для обновления UI
+        # Timer for UI updates
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_tab)
-        self.update_timer.start(500)  # Обновление каждые 500 мс
+        self.update_timer.start(500)  # Update every 500 ms
         
-        # Инициализация UI
+        # UI initialization
         self.init_ui()
         
-        # Соединяем сигналы
+        # Connect signals
         self.connect_signals()
 
     def init_ui(self):
         """
-        Инициализирует пользовательский интерфейс вкладки
+        Initializes the tab's user interface
         """
-        # Основной макет
+        # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Верхняя панель (режим работы, управление камерой, фоном и т.д.)
+        # Top panel (operation mode, camera control, background, etc.)
         top_panel = QHBoxLayout()
-        top_panel.setSpacing(10)  # Увеличиваем расстояние между элементами
+        top_panel.setSpacing(10)  # Increase spacing between elements
         top_panel_widget = QWidget()
         top_panel_widget.setLayout(top_panel)
         top_panel_widget.setFixedHeight(TOP_PANEL_HEIGHT)
         
-        # Панель выбора режима
-        mode_panel = QGroupBox("Режим работы")
-        mode_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
+        # Mode selection panel
+        mode_panel = QGroupBox("Operation Mode")
+        mode_panel.setMinimumWidth(120)  # Reduce minimum width
         mode_layout = QVBoxLayout(mode_panel)
-        mode_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        mode_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Радиокнопки выбора режима
-        self.camera_radio = QRadioButton("Камера")
-        self.file_radio = QRadioButton("Чтение файлов")
+        # Mode selection radio buttons
+        self.camera_radio = QRadioButton("Camera")
+        self.file_radio = QRadioButton("File Reading")
         
-        # Группа радиокнопок
+        # Radio button group
         self.mode_group = QButtonGroup()
         self.mode_group.addButton(self.camera_radio, 0)
         self.mode_group.addButton(self.file_radio, 1)
         
-        # Кнопка открытия файла
-        self.open_file_btn = QPushButton("Открыть файл")
+        # Open file button
+        self.open_file_btn = QPushButton("Open File")
         self.open_file_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
         self.open_file_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
         self.open_file_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
-        # Добавляем в макет панели режима
+        # Add to mode panel layout
         mode_layout.addWidget(self.camera_radio)
         mode_layout.addWidget(self.file_radio)
         mode_layout.addWidget(self.open_file_btn)
         
-        # Панель управления камерой
-        camera_panel = QGroupBox("Управление камерой")
-        camera_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
+        # Camera control panel
+        camera_panel = QGroupBox("Camera Control")
+        camera_panel.setMinimumWidth(120)  # Reduce minimum width
         camera_layout = QVBoxLayout(camera_panel)
-        camera_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        camera_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Выпадающий список камер
-        self.camera_label = QLabel("Камера:")
+        # Camera dropdown
+        self.camera_label = QLabel("Camera:")
         self.camera_combo = QComboBox()
-        self.camera_combo.addItem("Не выбрано")
+        self.camera_combo.addItem("Not selected")
         self.camera_combo.addItems(self.main_window.camera_manager.get_camera_list())
         
-        # Кнопки управления камерой
+        # Camera control buttons
         self.launch_camera_btn = QPushButton("Launch the camera")
         self.launch_camera_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
         self.launch_camera_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
         self.launch_camera_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
-        self.stop_camera_btn = QPushButton("Завершить работу с камерой")
+        self.stop_camera_btn = QPushButton("Stop camera")
         self.stop_camera_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
         self.stop_camera_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
         self.stop_camera_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
-        # Добавляем в макет панели камеры
+        # Add to camera panel layout
         camera_layout.addWidget(self.camera_label)
         camera_layout.addWidget(self.camera_combo)
         camera_layout.addWidget(self.launch_camera_btn)
         camera_layout.addWidget(self.stop_camera_btn)
         
-        # Панель информации о камере
-        camera_info_panel = QGroupBox("Информация о камере")
-        camera_info_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
+        # Camera information panel
+        camera_info_panel = QGroupBox("Camera Information")
+        camera_info_panel.setMinimumWidth(120)  # Reduce minimum width
         camera_info_layout = QVBoxLayout(camera_info_panel)
-        camera_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        camera_info_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Метки с информацией
-        self.camera_name_label = QLabel("Название: -")
-        self.camera_resolution_label = QLabel("Разрешение: -")
-        self.camera_pixel_size_label = QLabel("Размер пикселя: -")
+        # Information labels
+        self.camera_name_label = QLabel("Name: -")
+        self.camera_resolution_label = QLabel("Resolution: -")
+        self.camera_pixel_size_label = QLabel("Pixel size: -")
         
-        # Добавляем в макет панели информации
+        # Add to camera info panel layout
         camera_info_layout.addWidget(self.camera_name_label)
         camera_info_layout.addWidget(self.camera_resolution_label)
         camera_info_layout.addWidget(self.camera_pixel_size_label)
         
-        # Панель управления фоном
-        background_panel = QGroupBox("Сбор фона")
-        background_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
+        # Background collection panel
+        background_panel = QGroupBox("Background Collection")
+        background_panel.setMinimumWidth(120)  # Reduce minimum width
         background_layout = QVBoxLayout(background_panel)
-        background_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        background_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Количество кадров для фона
+        # Number of frames for background
         bg_frames_layout = QHBoxLayout()
-        bg_frames_layout.addWidget(QLabel("Количество кадров:"))
+        bg_frames_layout.addWidget(QLabel("Number of frames:"))
         self.bg_frames_spinbox = QSpinBox()
         self.bg_frames_spinbox.setRange(1, 100)
         self.bg_frames_spinbox.setValue(40)
         bg_frames_layout.addWidget(self.bg_frames_spinbox)
         
-        # Кнопки управления сбором фона
+        # Background collection control buttons
         self.get_background_btn = QPushButton("Get background")
         self.get_background_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
         self.get_background_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
@@ -148,18 +148,18 @@ class CameraTab(QWidget):
         self.stop_bg_collection_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
         self.stop_bg_collection_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
-        # Добавляем в макет панели фона
+        # Add to background panel layout
         background_layout.addLayout(bg_frames_layout)
         background_layout.addWidget(self.get_background_btn)
         background_layout.addWidget(self.stop_bg_collection_btn)
         
-        # Панель управления съемкой
-        capture_panel = QGroupBox("Управление съемкой")
-        capture_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
+        # Capture control panel
+        capture_panel = QGroupBox("Capture Control")
+        capture_panel.setMinimumWidth(120)  # Reduce minimum width
         capture_layout = QVBoxLayout(capture_panel)
-        capture_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        capture_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Кнопки управления съемкой
+        # Capture control buttons
         self.start_capture_btn = QPushButton("Start")
         self.start_capture_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
         self.start_capture_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
@@ -175,40 +175,40 @@ class CameraTab(QWidget):
         self.export_data_btn.setMinimumHeight(BUTTON_MIN_HEIGHT)
         self.export_data_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
         
-        # Добавляем в макет панели съемки
+        # Add to capture panel layout
         capture_layout.addWidget(self.start_capture_btn)
         capture_layout.addWidget(self.stop_capture_btn)
         capture_layout.addWidget(self.export_data_btn)
         
-        # Панель состояния
-        status_panel = QGroupBox("Статус")
-        status_panel.setMinimumWidth(120)  # Уменьшаем минимальную ширину
+        # Status panel
+        status_panel = QGroupBox("Status")
+        status_panel.setMinimumWidth(120)  # Reduce minimum width
         status_layout = QVBoxLayout(status_panel)
-        status_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        status_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Метка с текущим режимом
-        self.mode_status_label = QLabel("Режим: Камера")
-        self.camera_status_label = QLabel("Камера: Не подключена")
-        self.capture_status_label = QLabel("Сбор данных: Остановлен")
+        # Status labels
+        self.mode_status_label = QLabel("Mode: Camera")
+        self.camera_status_label = QLabel("Camera: Not connected")
+        self.capture_status_label = QLabel("Data collection: Stopped")
         
-        # Добавляем в макет панели состояния
+        # Add to status panel layout
         status_layout.addWidget(self.mode_status_label)
         status_layout.addWidget(self.camera_status_label)
         status_layout.addWidget(self.capture_status_label)
         
-        # Панель с информацией о центроиде и RMS
-        beam_info_panel = QGroupBox("Информация о пучке")
-        beam_info_panel.setMinimumWidth(140)  # Увеличиваем минимальную ширину
+        # Beam information panel
+        beam_info_panel = QGroupBox("Beam Information")
+        beam_info_panel.setMinimumWidth(140)  # Increase minimum width
         beam_info_layout = QVBoxLayout(beam_info_panel)
-        beam_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        beam_info_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Метки с информацией
-        self.centroid_x_label = QLabel("Центроид X: -")
-        self.centroid_y_label = QLabel("Центроид Y: -")
+        # Information labels
+        self.centroid_x_label = QLabel("Centroid X: -")
+        self.centroid_y_label = QLabel("Centroid Y: -")
         self.rms_x_label = QLabel("RMS X: -")
         self.rms_y_label = QLabel("RMS Y: -")
         
-        # Уменьшаем размер шрифта для меток
+        # Reduce font size for labels
         font = QFont()
         font.setPointSize(9)
         self.centroid_x_label.setFont(font)
@@ -216,13 +216,13 @@ class CameraTab(QWidget):
         self.rms_x_label.setFont(font)
         self.rms_y_label.setFont(font)
         
-        # Добавляем в макет панели информации
+        # Add to beam info panel layout
         beam_info_layout.addWidget(self.centroid_x_label)
         beam_info_layout.addWidget(self.centroid_y_label)
         beam_info_layout.addWidget(self.rms_x_label)
         beam_info_layout.addWidget(self.rms_y_label)
         
-        # Добавляем все панели в верхнюю панель с равным растяжением
+        # Add all panels to top panel with equal stretch
         top_panel.addWidget(mode_panel, 1)
         top_panel.addWidget(camera_panel, 1)
         top_panel.addWidget(camera_info_panel, 1)
@@ -231,217 +231,217 @@ class CameraTab(QWidget):
         top_panel.addWidget(status_panel, 1)
         top_panel.addWidget(beam_info_panel, 1)
         
-        # Центральный контейнер для графиков - один виджет вместо трех
+        # Central container for plots - one widget instead of three
         self.plot_widget = QWidget()
         self.plot_widget.setMinimumSize(400, 400)
         self.plot_layout = QVBoxLayout(self.plot_widget)
         self.plot_layout.setContentsMargins(0, 0, 0, 0)
         self.plot_canvas = None
         
-        # Добавляем все в главный макет
+        # Add all to main layout
         main_layout.addWidget(top_panel_widget)
         main_layout.addWidget(self.plot_widget, 1)
         
         self.setLayout(main_layout)
         
-        # Инициализируем состояние виджетов
+        # Initialize widget states
         self.update_ui_state()
         
     def connect_signals(self):
         """
-        Соединяет сигналы с обработчиками
+        Connects signals to handlers
         """
-        # Режим работы
+        # Operation mode
         self.camera_radio.toggled.connect(self.on_mode_changed)
         self.file_radio.toggled.connect(self.on_mode_changed)
         self.open_file_btn.clicked.connect(self.on_open_file)
         
-        # Управление камерой
+        # Camera control
         self.launch_camera_btn.clicked.connect(self.on_launch_camera)
         self.stop_camera_btn.clicked.connect(self.on_stop_camera)
         
-        # Управление фоном
+        # Background collection
         self.get_background_btn.clicked.connect(self.on_get_background)
         self.stop_bg_collection_btn.clicked.connect(self.on_stop_bg_collection)
         
-        # Управление съемкой
+        # Capture control
         self.start_capture_btn.clicked.connect(self.on_start_capture)
         self.stop_capture_btn.clicked.connect(self.on_stop_capture)
         self.export_data_btn.clicked.connect(self.on_export_data)
         
-        # Устанавливаем начальный режим
+        # Set initial mode
         self.camera_radio.setChecked(True)
         
     def update_ui_state(self):
         """
-        Обновляет состояние элементов интерфейса в зависимости от текущего режима
+        Updates the interface state depending on the current mode
         """
-        # Получаем текущий режим
+        # Get current mode
         is_camera_mode = self.main_window.current_mode == "camera"
         
-        # Управление режимами
+        # Mode control
         self.camera_radio.setChecked(is_camera_mode)
         self.file_radio.setChecked(not is_camera_mode)
         
-        # Обновление метки режима
-        self.mode_status_label.setText("Режим: {}".format('Камера' if is_camera_mode else 'Чтение файлов'))
+        # Update mode label
+        self.mode_status_label.setText("Mode: {}".format('Camera' if is_camera_mode else 'File Reading'))
         
-        # Управление кнопкой "Открыть файл" - активна только в режиме чтения файла
+        # Open file button - active only in file reading mode
         self.open_file_btn.setEnabled(not is_camera_mode)
         
-        # В режиме камеры
+        # In camera mode
         if is_camera_mode:
-            # Доступность элементов управления камерой
+            # Camera control availability
             camera_connected = self.main_window.camera_manager.is_connected
             
             self.camera_combo.setEnabled(not camera_connected)
             self.launch_camera_btn.setEnabled(not camera_connected)
             self.stop_camera_btn.setEnabled(camera_connected)
             
-            # Доступность элементов управления фоном
-            # Явно проверяем наличие фона в image_reader
+            # Background control availability
+            # Explicitly check for background presence in image_reader
             has_background = self.main_window.image_reader.background is not None
             is_collecting_bg = self.main_window.image_reader.is_collecting_background
             
-            # Логирование состояния фона для отладки
+            # Background state logging for debugging
             print("CameraTab: has_background={}, is_collecting_bg={}".format(has_background, is_collecting_bg))
             
             self.bg_frames_spinbox.setEnabled(camera_connected and not is_collecting_bg)
             self.get_background_btn.setEnabled(camera_connected and not is_collecting_bg)
             self.stop_bg_collection_btn.setEnabled(camera_connected and is_collecting_bg)
             
-            # Доступность элементов управления съемкой
+            # Capture control availability
             can_start_capture = camera_connected and has_background and not self.is_capturing
             self.start_capture_btn.setEnabled(can_start_capture)
             self.stop_capture_btn.setEnabled(camera_connected and self.is_capturing)
             self.export_data_btn.setEnabled(camera_connected and not self.is_capturing)
             
-            # Логирование состояния кнопки Start
+            # Start button logging
             print("CameraTab: start_capture_btn.isEnabled={}".format(can_start_capture))
             
-            # Обновление статуса камеры
+            # Camera status update
             if camera_connected:
                 camera_info = self.main_window.camera_manager.get_camera_info()
                 if camera_info:
-                    self.camera_status_label.setText("Камера: {}".format(camera_info.get('name', 'Подключена')))
+                    self.camera_status_label.setText("Camera: {}".format(camera_info.get('name', 'Connected')))
                 else:
-                    self.camera_status_label.setText("Камера: Подключена")
+                    self.camera_status_label.setText("Camera: Connected")
             else:
-                self.camera_status_label.setText("Камера: Не подключена")
+                self.camera_status_label.setText("Camera: Not connected")
                 
-            # Обновление статуса съемки
+            # Capture status update
             if self.is_capturing:
-                self.capture_status_label.setText("Сбор данных: Идет сбор")
+                self.capture_status_label.setText("Data collection: Collecting")
             elif is_collecting_bg:
-                self.capture_status_label.setText("Сбор данных: Сбор фона")
+                self.capture_status_label.setText("Data collection: Background collection")
             else:
-                self.capture_status_label.setText("Сбор данных: Остановлен")
+                self.capture_status_label.setText("Data collection: Stopped")
         else:
-            # В режиме чтения файлов
-            # Отключаем все элементы управления камерой
+            # In file reading mode
+            # Disable all camera control elements
             self.camera_combo.setEnabled(False)
             self.launch_camera_btn.setEnabled(False)
             self.stop_camera_btn.setEnabled(False)
             
-            # Отключаем управление фоном
+            # Disable background control
             self.bg_frames_spinbox.setEnabled(False)
             self.get_background_btn.setEnabled(False)
             self.stop_bg_collection_btn.setEnabled(False)
             
-            # Отключаем управление съемкой
+            # Disable capture control
             self.start_capture_btn.setEnabled(False)
             self.stop_capture_btn.setEnabled(False)
             
-            # Включаем экспорт, если есть данные
+            # Enable export if there are data
             self.export_data_btn.setEnabled(self.main_window.file_data["current_frame"] is not None)
             
-            # Обновление статуса
-            self.camera_status_label.setText("Камера: -")
-            self.capture_status_label.setText("Сбор данных: -")
+            # Update status
+            self.camera_status_label.setText("Camera: -")
+            self.capture_status_label.setText("Data collection: -")
             
-        # Обновляем информацию о камере
+        # Update camera information
         self.update_camera_info()
         
     def update_camera_info(self):
         """
-        Обновляет информацию о камере
+        Updates camera information
         """
-        # Получаем текущий режим
+        # Get current mode
         is_camera_mode = self.main_window.current_mode == "camera"
         
-        # В режиме камеры проверяем, подключена ли камера
+        # In camera mode, check if camera is connected
         if is_camera_mode and not self.main_window.camera_manager.is_connected:
-            self.camera_name_label.setText("Название: -")
-            self.camera_resolution_label.setText("Разрешение: -")
-            self.camera_pixel_size_label.setText("Размер пикселя: -")
+            self.camera_name_label.setText("Name: -")
+            self.camera_resolution_label.setText("Resolution: -")
+            self.camera_pixel_size_label.setText("Pixel size: -")
             return
             
         camera_info = self.main_window.get_camera_info()
         
         if camera_info:
-            self.camera_name_label.setText("Название: {}".format(camera_info.get('camera_name', '-')))
+            self.camera_name_label.setText("Name: {}".format(camera_info.get('camera_name', '-')))
             resolution = camera_info.get("resolution", (0, 0))
-            self.camera_resolution_label.setText("Разрешение: {} x {}".format(resolution[0], resolution[1]))
+            self.camera_resolution_label.setText("Resolution: {} x {}".format(resolution[0], resolution[1]))
             
             pixel_size_x = camera_info.get("pixel_size_x", 0)
             pixel_size_y = camera_info.get("pixel_size_y", 0)
-            self.camera_pixel_size_label.setText("Размер пикселя: {:.8f} x {:.8f} мм".format(pixel_size_x, pixel_size_y))
+            self.camera_pixel_size_label.setText("Pixel size: {:.8f} x {:.8f} mm".format(pixel_size_x, pixel_size_y))
         else:
-            self.camera_name_label.setText("Название: -")
-            self.camera_resolution_label.setText("Разрешение: -")
-            self.camera_pixel_size_label.setText("Размер пикселя: -")
+            self.camera_name_label.setText("Name: -")
+            self.camera_resolution_label.setText("Resolution: -")
+            self.camera_pixel_size_label.setText("Pixel size: -")
             
     def update_plots(self):
         """
-        Обновляет все графики
+        Updates all plots
         """
-        # В режиме камеры проверяем, подключена ли камера
+        # In camera mode, check if camera is connected
         if self.main_window.current_mode == "camera" and not self.main_window.camera_manager.is_connected:
             return
             
-        # Получаем текущие данные
+        # Get current data
         data = self.main_window.get_current_data()
         camera_info = self.main_window.get_camera_info()
         
         if data["current_frame"] is None or camera_info is None:
             return
             
-        # Проверяем изменились ли данные
+        # Check if data changed
         if data["current_frame"] is not None:
             current_hash = hash(str(data["current_frame"].data.tobytes()))
             if self.last_data_hash == current_hash and self.plot_canvas is not None:
-                # Данные не изменились, выходим
+                # Data didn't change, exit
                 return
             self.last_data_hash = current_hash
             
-        # Получаем информацию о камере
+        # Get camera information
         pixel_size_x = camera_info.get("pixel_size_x", 1)
         pixel_size_y = camera_info.get("pixel_size_y", 1)
         
-        # Создаем новую фигуру с тремя областями
+        # Create new figure with three areas
         fig = Figure(figsize=(10, 8))
         
-        # Изменяем GridSpec для добавления места под colorbar
+        # Change GridSpec for adding colorbar space
         gs = GridSpec(2, 3, width_ratios=[0.5, 5, 0.3], height_ratios=[5, 0.8], figure=fig)
         
-        # Область для проекции Y (слева)
+        # Area for Y projection (left)
         ax_y_proj = fig.add_subplot(gs[0, 0])
-        # Область для тепловой карты (справа вверху)
+        # Area for heatmap (right above)
         ax_heatmap = fig.add_subplot(gs[0, 1])
-        # Область для проекции X (справа внизу)
+        # Area for X projection (right below)
         ax_x_proj = fig.add_subplot(gs[1, 1])
-        # Область для colorbar
+        # Area for colorbar
         cax = fig.add_subplot(gs[0, 2])
         
-        # Получаем данные изображения
+        # Get image data
         img_data = data["current_frame"].data
         
-        # Вычисляем координаты в миллиметрах (центрированные относительно нуля)
+        # Calculate coordinates in millimeters (centered relative to zero)
         height, width = img_data.shape
         x_mm = (np.arange(width) - width / 2) * pixel_size_x
         y_mm = (np.arange(height) - height / 2) * pixel_size_y
         
-        # Тепловая карта
+        # Heatmap
         im = ax_heatmap.imshow(
             img_data, 
             extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
@@ -449,80 +449,80 @@ class CameraTab(QWidget):
             aspect='auto',
             cmap='jet'
         )
-        ax_heatmap.set_xlabel('X (мм)')
-        ax_heatmap.set_ylabel('Y (мм)')
-        ax_heatmap.set_title('Профиль пучка')
+        ax_heatmap.set_xlabel('X (mm)')
+        ax_heatmap.set_ylabel('Y (mm)')
+        ax_heatmap.set_title('Beam Profile')
         
-        # Добавляем colorbar
-        fig.colorbar(im, cax=cax, label='Интенсивность')
+        # Add colorbar
+        fig.colorbar(im, cax=cax, label='Intensity')
         
-        # Проекции
+        # Projections
         x_proj = np.sum(img_data, axis=0)
         y_proj = np.sum(img_data, axis=1)
         
-        # Аппроксимация гауссианой - отключена
+        # Gaussian approximation - disabled
         # _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_mm, x_proj)
         # _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_mm, y_proj)
         
-        # Рисуем проекцию X
-        ax_x_proj.plot(x_mm, x_proj, 'b-', linewidth=1, label='Данные')
+        # Draw X projection
+        ax_x_proj.plot(x_mm, x_proj, 'b-', linewidth=1, label='Data')
         # if gauss_x is not None:
-        #     ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
-        ax_x_proj.set_xlabel('X (мм)')
-        ax_x_proj.set_ylabel('Интенсивность')
+        #     ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Gauss')
+        ax_x_proj.set_xlabel('X (mm)')
+        ax_x_proj.set_ylabel('Intensity')
         ax_x_proj.grid(True, linestyle='--', alpha=0.7)
         
-        # Рисуем проекцию Y
-        ax_y_proj.plot(y_proj, y_mm, 'b-', linewidth=1, label='Данные')
+        # Draw Y projection
+        ax_y_proj.plot(y_proj, y_mm, 'b-', linewidth=1, label='Data')
         # if gauss_y is not None:
-        #     ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
-        ax_y_proj.set_ylabel('Y (мм)')
-        ax_y_proj.set_xlabel('Интенсивность')
+        #     ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Gauss')
+        ax_y_proj.set_ylabel('Y (mm)')
+        ax_y_proj.set_xlabel('Intensity')
         ax_y_proj.grid(True, linestyle='--', alpha=0.7)
         
-        # Выравниваем оси
+        # Equalize axes
         ax_y_proj.set_ylim(ax_heatmap.get_ylim())
         ax_x_proj.set_xlim(ax_heatmap.get_xlim())
         
-        # Убираем пустое место
+        # Remove empty space
         fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1, wspace=0.3, hspace=0.3)
         
-        # Очищаем текущий холст
+        # Clear current canvas
         if self.plot_canvas is not None:
             self.plot_layout.removeWidget(self.plot_canvas)
-            # Правильное освобождение ресурсов matplotlib
+            # Correct matplotlib resource release
             plt_figure = self.plot_canvas.figure
             plt_figure.clear()
             self.plot_canvas.close()
         
-        # Создаем новый холст
+        # Create new canvas
         self.plot_canvas = FigureCanvasQTAgg(fig)
         
-        # Добавляем холст на макет
+        # Add canvas to layout
         self.plot_layout.addWidget(self.plot_canvas)
         
-        # Обновляем информацию о центроиде и RMS
+        # Update beam information and RMS
         centroid_x, centroid_y = data["centroid"]
         rms_x, rms_y = data["rms"]
         
-        self.centroid_x_label.setText("Центроид X: {:.6f} мм".format(centroid_x))
-        self.centroid_y_label.setText("Центроид Y: {:.6f} мм".format(centroid_y))
-        self.rms_x_label.setText("RMS X: {:.6f} мм".format(rms_x))
-        self.rms_y_label.setText("RMS Y: {:.6f} мм".format(rms_y))
+        self.centroid_x_label.setText("Centroid X: {:.6f} mm".format(centroid_x))
+        self.centroid_y_label.setText("Centroid Y: {:.6f} mm".format(centroid_y))
+        self.rms_x_label.setText("RMS X: {:.6f} mm".format(rms_x))
+        self.rms_y_label.setText("RMS Y: {:.6f} mm".format(rms_y))
         
     def update_tab(self):
         """
-        Обновляет содержимое вкладки
+        Updates tab content
         """
         self.update_ui_state()
         self.update_plots()
         
     def on_mode_changed(self, checked):
         """
-        Обработчик изменения режима работы
+        Handler for mode change
         
         Args:
-            checked: Флаг нажатия радиокнопки
+            checked: Radio button press flag
         """
         if checked:
             if self.camera_radio.isChecked():
@@ -532,71 +532,71 @@ class CameraTab(QWidget):
                 
     def on_open_file(self):
         """
-        Обработчик нажатия кнопки открытия файла
+        Handler for open file button press
         """
         if self.main_window.open_file_dialog():
             self.file_radio.setChecked(True)
             
     def on_launch_camera(self):
         """
-        Обработчик нажатия кнопки запуска камеры
+        Handler for camera launch button press
         """
         camera_name = self.camera_combo.currentText()
         
-        if camera_name == "Не выбрано":
-            QMessageBox.warning(self, "Предупреждение", "Выберите камеру")
+        if camera_name == "Not selected":
+            QMessageBox.warning(self, "Warning", "Select camera")
             return
             
         if not self.main_window.connect_to_camera(camera_name):
-            QMessageBox.critical(self, "Ошибка", "Не удалось подключиться к камере {}".format(camera_name))
+            QMessageBox.critical(self, "Error", "Failed to connect to camera {}".format(camera_name))
             
     def on_stop_camera(self):
         """
-        Обработчик нажатия кнопки остановки камеры
+        Handler for camera stop button press
         """
         if not self.main_window.disconnect_camera():
-            QMessageBox.critical(self, "Ошибка", "Не удалось отключиться от камеры")
+            QMessageBox.critical(self, "Error", "Failed to disconnect from camera")
             
     def on_get_background(self):
         """
-        Обработчик нажатия кнопки сбора фона
+        Handler for background get button press
         """
-        # Получаем количество кадров
+        # Get number of frames
         frames_count = self.bg_frames_spinbox.value()
         
-        # Показываем предупреждение
+        # Show warning
         reply = QMessageBox.question(
             self,
-            "Сбор фона",
-            "Убедитесь, что вы закрыли затвор лазера. Начать?",
+            "Background Collection",
+            "Ensure that you closed the laser shutter. Start?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
             if not self.main_window.start_background_collection(frames_count):
-                QMessageBox.critical(self, "Ошибка", "Не удалось запустить сбор фона")
+                QMessageBox.critical(self, "Error", "Failed to start background collection")
                 
     def on_stop_bg_collection(self):
         """
-        Обработчик нажатия кнопки остановки сбора фона
+        Handler for background stop button press
         """
         if not self.main_window.stop_background_collection():
-            QMessageBox.critical(self, "Ошибка", "Не удалось остановить сбор фона")
+            QMessageBox.critical(self, "Error", "Failed to stop background collection")
             
     def on_start_capture(self):
         """
-        Обработчик нажатия кнопки запуска съемки
+        Handler for capture start button press
         """
-        # Проверяем, что фон собран
+        # Check if background is collected
         has_background = self.main_window.image_reader.background is not None
         print("CameraTab.on_start_capture: has_background = {}".format(has_background))
         
         if not has_background:
             QMessageBox.warning(
                 self,
-                "Предупреждение",
-                "Необходимо собрать фон перед началом съемки"
+                "Warning",
+                "Background must be collected before starting capture"
             )
             return
             
@@ -605,13 +605,13 @@ class CameraTab(QWidget):
         
     def on_stop_capture(self):
         """
-        Обработчик нажатия кнопки остановки съемки
+        Handler for capture stop button press
         """
         self.is_capturing = False
         self.update_ui_state()
         
     def on_export_data(self):
         """
-        Обработчик нажатия кнопки экспорта данных
+        Handler for export data button press
         """
         self.main_window.save_file_dialog()

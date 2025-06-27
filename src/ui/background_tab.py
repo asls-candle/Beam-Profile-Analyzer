@@ -12,65 +12,65 @@ from src.ui.constants import TOP_PANEL_HEIGHT
 
 class BackgroundTab(QWidget):
     """
-    Вкладка для отображения фонового изображения
+    Tab for displaying the background image
     """
     def __init__(self, main_window):
         super().__init__()
         
         self.main_window = main_window
-        self.last_data_hash = None  # Для отслеживания изменений
+        self.last_data_hash = None  # For tracking changes
         
-        # Таймер для обновления UI
+        # Timer for UI updates
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_tab)
-        self.update_timer.start(1000)  # Обновление каждую секунду
+        self.update_timer.start(1000)  # Update every second
         
-        # Инициализация UI
+        # UI initialization
         self.init_ui()
         
     def init_ui(self):
         """
-        Инициализирует пользовательский интерфейс вкладки
+        Initializes the tab's user interface
         """
-        # Основной макет
+        # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Верхняя панель с информацией о камере
+        # Top panel with camera information
         top_panel = QHBoxLayout()
-        top_panel.setSpacing(10)  # Увеличиваем расстояние между элементами
+        top_panel.setSpacing(10)  # Increase spacing between elements
         top_panel_widget = QWidget()
         top_panel_widget.setLayout(top_panel)
         top_panel_widget.setFixedHeight(TOP_PANEL_HEIGHT)
         
-        # Панель информации о камере
-        camera_info_panel = QGroupBox("Информация о камере")
-        camera_info_panel.setMinimumWidth(150)  # Устанавливаем минимальную ширину
+        # Camera information panel
+        camera_info_panel = QGroupBox("Camera Information")
+        camera_info_panel.setMinimumWidth(150)  # Set minimum width
         camera_info_layout = QVBoxLayout(camera_info_panel)
-        camera_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        camera_info_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Метки с информацией
-        self.camera_name_label = QLabel("Название: -")
-        self.camera_resolution_label = QLabel("Разрешение: -")
-        self.camera_pixel_size_label = QLabel("Размер пикселя: -")
+        # Information labels
+        self.camera_name_label = QLabel("Name: -")
+        self.camera_resolution_label = QLabel("Resolution: -")
+        self.camera_pixel_size_label = QLabel("Pixel size: -")
         
-        # Добавляем в макет панели информации
+        # Add to camera info panel layout
         camera_info_layout.addWidget(self.camera_name_label)
         camera_info_layout.addWidget(self.camera_resolution_label)
         camera_info_layout.addWidget(self.camera_pixel_size_label)
         
-        # Панель с информацией о центроиде и RMS
-        beam_info_panel = QGroupBox("Информация о фоне")
-        beam_info_panel.setMinimumWidth(140)  # Устанавливаем минимальную ширину
+        # Panel with centroid and RMS information
+        beam_info_panel = QGroupBox("Background Information")
+        beam_info_panel.setMinimumWidth(140)  # Set minimum width
         beam_info_layout = QVBoxLayout(beam_info_panel)
-        beam_info_layout.setSpacing(5)  # Уменьшаем расстояние между элементами внутри панели
+        beam_info_layout.setSpacing(5)  # Reduce spacing between elements inside the panel
         
-        # Метки с информацией
-        self.centroid_x_label = QLabel("Центроид X: -")
-        self.centroid_y_label = QLabel("Центроид Y: -")
+        # Information labels
+        self.centroid_x_label = QLabel("Centroid X: -")
+        self.centroid_y_label = QLabel("Centroid Y: -")
         self.rms_x_label = QLabel("RMS X: -")
         self.rms_y_label = QLabel("RMS Y: -")
         
-        # Уменьшаем размер шрифта для меток
+        # Reduce font size for labels
         font = QFont()
         font.setPointSize(9)
         self.centroid_x_label.setFont(font)
@@ -78,34 +78,34 @@ class BackgroundTab(QWidget):
         self.rms_x_label.setFont(font)
         self.rms_y_label.setFont(font)
         
-        # Добавляем в макет панели информации
+        # Add to information panel layout
         beam_info_layout.addWidget(self.centroid_x_label)
         beam_info_layout.addWidget(self.centroid_y_label)
         beam_info_layout.addWidget(self.rms_x_label)
         beam_info_layout.addWidget(self.rms_y_label)
         
-        # Добавляем панели в верхнюю панель
+        # Add panels to top panel
         top_panel.addWidget(camera_info_panel)
         
-        # Создаем невидимые пустые панели для имитации остальных панелей в camera_tab
-        for i in range(5):  # 5 других панелей в camera_tab
+        # Create invisible empty panels to imitate other panels in camera_tab
+        for i in range(5):  # 5 other panels in camera_tab
             empty_panel = QGroupBox()
             empty_panel.setMinimumWidth(120)
             empty_panel.setStyleSheet("border: none; background-color: transparent;")
             empty_layout = QVBoxLayout(empty_panel)
             top_panel.addWidget(empty_panel)
             
-        # Добавляем панель информации о пучке в конце
+        # Add beam information panel at the end
         top_panel.addWidget(beam_info_panel)
         
-        # Центральный контейнер для графиков - один виджет вместо трех
+        # Central container for plots - one widget instead of three
         self.plot_widget = QWidget()
         self.plot_widget.setMinimumSize(400, 400)
         self.plot_layout = QVBoxLayout(self.plot_widget)
         self.plot_layout.setContentsMargins(0, 0, 0, 0)
         self.plot_canvas = None
         
-        # Добавляем все в главный макет
+        # Add all to main layout
         main_layout.addWidget(top_panel_widget)
         main_layout.addWidget(self.plot_widget, 1)
         
@@ -113,73 +113,73 @@ class BackgroundTab(QWidget):
         
     def update_camera_info(self):
         """
-        Обновляет информацию о камере
+        Updates camera information
         """
         camera_info = self.main_window.get_camera_info()
         
         if camera_info:
-            self.camera_name_label.setText("Название: {}".format(camera_info.get('camera_name', '-')))
+            self.camera_name_label.setText("Name: {}".format(camera_info.get('camera_name', '-')))
             resolution = camera_info.get("resolution", (0, 0))
-            self.camera_resolution_label.setText("Разрешение: {} x {}".format(resolution[0], resolution[1]))
+            self.camera_resolution_label.setText("Resolution: {} x {}".format(resolution[0], resolution[1]))
             
             pixel_size_x = camera_info.get("pixel_size_x", 0)
             pixel_size_y = camera_info.get("pixel_size_y", 0)
-            self.camera_pixel_size_label.setText("Размер пикселя: {:.8f} x {:.8f} мм".format(pixel_size_x, pixel_size_y))
+            self.camera_pixel_size_label.setText("Pixel size: {:.8f} x {:.8f} mm".format(pixel_size_x, pixel_size_y))
         else:
-            self.camera_name_label.setText("Название: -")
-            self.camera_resolution_label.setText("Разрешение: -")
-            self.camera_pixel_size_label.setText("Размер пикселя: -")
+            self.camera_name_label.setText("Name: -")
+            self.camera_resolution_label.setText("Resolution: -")
+            self.camera_pixel_size_label.setText("Pixel size: -")
             
     def update_plots(self):
         """
-        Обновляет все графики только если данные изменились
+        Updates all plots only if data changed
         """
-        # Получаем текущие данные
+        # Get current data
         data = self.main_window.get_current_data()
         camera_info = self.main_window.get_camera_info()
         
-        # Если нет данных фона или информации о камере
+        # If there's no background data or camera information
         if data["background"] is None or camera_info is None:
-            print("BackgroundTab: Нет данных фона или информации о камере")
+            print("BackgroundTab: No background data or camera information")
             return
         
-        # Проверяем изменились ли данные
+        # Check if data changed
         current_hash = hash(str(data["background"].data.tobytes()))
         if self.last_data_hash == current_hash and self.plot_canvas is not None:
-            return  # Данные не изменились, выходим
+            return  # Data didn't change, exit
         
-        print("BackgroundTab: Обновляем графики фона. Предыдущий хеш: {}, новый хеш: {}".format(self.last_data_hash, current_hash))
+        print("BackgroundTab: Updating background plots. Previous hash: {}, new hash: {}".format(self.last_data_hash, current_hash))
         self.last_data_hash = current_hash
         
-        # Получаем информацию о камере
+        # Get camera information
         pixel_size_x = camera_info.get("pixel_size_x", 1)
         pixel_size_y = camera_info.get("pixel_size_y", 1)
         
-        # Создаем новую фигуру с тремя областями
+        # Create new figure with three areas
         fig = Figure(figsize=(10, 8))
         
-        # Изменяем GridSpec для добавления места под colorbar
+        # Change GridSpec to add space for colorbar
         gs = GridSpec(2, 3, width_ratios=[0.5, 5, 0.3], height_ratios=[5, 0.8], figure=fig)
         
-        # Область для проекции Y (слева)
+        # Area for Y projection (left)
         ax_y_proj = fig.add_subplot(gs[0, 0])
-        # Область для тепловой карты (справа вверху)
+        # Area for heatmap (right above)
         ax_heatmap = fig.add_subplot(gs[0, 1])
-        # Область для проекции X (справа внизу)
+        # Area for X projection (right below)
         ax_x_proj = fig.add_subplot(gs[1, 1])
-        # Область для colorbar
+        # Area for colorbar
         cax = fig.add_subplot(gs[0, 2])
         
-        # Получаем данные изображения
+        # Get image data
         img_data = data["background"].data
-        print("BackgroundTab: Данные фона имеют размер {}".format(img_data.shape))
+        print("BackgroundTab: Background data has size {}".format(img_data.shape))
         
-        # Вычисляем координаты в миллиметрах (центрированные относительно нуля)
+        # Calculate coordinates in millimeters (centered relative to zero)
         height, width = img_data.shape
         x_mm = (np.arange(width) - width / 2) * pixel_size_x
         y_mm = (np.arange(height) - height / 2) * pixel_size_y
         
-        # Тепловая карта
+        # Heatmap
         im = ax_heatmap.imshow(
             img_data, 
             extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
@@ -187,65 +187,65 @@ class BackgroundTab(QWidget):
             aspect='auto',
             cmap='jet'
         )
-        ax_heatmap.set_xlabel('X (мм)')
-        ax_heatmap.set_ylabel('Y (мм)')
-        ax_heatmap.set_title('Профиль пучка')
+        ax_heatmap.set_xlabel('X (mm)')
+        ax_heatmap.set_ylabel('Y (mm)')
+        ax_heatmap.set_title('Beam Profile')
         
-        # Добавляем colorbar
-        fig.colorbar(im, cax=cax, label='Интенсивность')
+        # Add colorbar
+        fig.colorbar(im, cax=cax, label='Intensity')
         
-        # Проекции
+        # Projections
         x_proj = np.sum(img_data, axis=0)
         y_proj = np.sum(img_data, axis=1)
         
-        # Аппроксимация гауссианой - отключена
+        # Gaussian approximation - disabled
         # _, gauss_x = self.main_window.image_analyzer.fit_gaussian(x_mm, x_proj)
         # _, gauss_y = self.main_window.image_analyzer.fit_gaussian(y_mm, y_proj)
         
-        # Рисуем проекцию X
-        ax_x_proj.plot(x_mm, x_proj, 'b-', linewidth=1, label='Данные')
+        # Draw X projection
+        ax_x_proj.plot(x_mm, x_proj, 'b-', linewidth=1, label='Data')
         # if gauss_x is not None:
-        #     ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Гаусс')
-        ax_x_proj.set_xlabel('X (мм)')
-        ax_x_proj.set_ylabel('Интенсивность')
+        #     ax_x_proj.plot(x_mm, gauss_x, 'r--', label='Gauss')
+        ax_x_proj.set_xlabel('X (mm)')
+        ax_x_proj.set_ylabel('Intensity')
         ax_x_proj.grid(True, linestyle='--', alpha=0.7)
         
-        # Рисуем проекцию Y
-        ax_y_proj.plot(y_proj, y_mm, 'b-', linewidth=1, label='Данные')
+        # Draw Y projection
+        ax_y_proj.plot(y_proj, y_mm, 'b-', linewidth=1, label='Data')
         # if gauss_y is not None:
-        #     ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Гаусс')
-        ax_y_proj.set_ylabel('Y (мм)')
-        ax_y_proj.set_xlabel('Интенсивность')
+        #     ax_y_proj.plot(gauss_y, y_mm, 'r--', label='Gauss')
+        ax_y_proj.set_ylabel('Y (mm)')
+        ax_y_proj.set_xlabel('Intensity')
         ax_y_proj.grid(True, linestyle='--', alpha=0.7)
         
-        # Выравниваем оси
+        # Equalize axes
         ax_y_proj.set_ylim(ax_heatmap.get_ylim())
         ax_x_proj.set_xlim(ax_heatmap.get_xlim())
         
-        # Убираем пустое место
+        # Remove empty space
         fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1, wspace=0.3, hspace=0.3)
         
-        # Очищаем текущий холст
+        # Clear current canvas
         if self.plot_canvas is not None:
             self.plot_layout.removeWidget(self.plot_canvas)
-            # Правильное освобождение ресурсов matplotlib
+            # Proper matplotlib resource release
             plt_figure = self.plot_canvas.figure
             plt_figure.clear()
             self.plot_canvas.close()
         
-        # Создаем новый холст
+        # Create new canvas
         self.plot_canvas = FigureCanvasQTAgg(fig)
         
-        # Добавляем холст на макет
+        # Add canvas to layout
         self.plot_layout.addWidget(self.plot_canvas)
         
-        # Вычисляем или берем предварительно рассчитанные центроид и RMS фона
+        # Calculate or use pre-calculated centroid and RMS of background
         if self.main_window.current_mode == "file" and "background_centroid" in self.main_window.file_data:
-            # Используем предварительно вычисленные значения
+            # Use pre-calculated values
             centroid_x, centroid_y = self.main_window.file_data["background_centroid"]
             rms_x, rms_y = self.main_window.file_data["background_rms"]
         else:
-            # Вычисляем на месте
+            # Calculate on the spot
             centroid_x, centroid_y = self.main_window.image_analyzer.calculate_centroid(
                 data["background"], pixel_size_x, pixel_size_y
             )
@@ -254,21 +254,21 @@ class BackgroundTab(QWidget):
                 data["background"], pixel_size_x, pixel_size_y
             )
         
-        # Обновляем информацию о центроиде и RMS
-        self.centroid_x_label.setText("Центроид X: {:.6f} мм".format(centroid_x))
-        self.centroid_y_label.setText("Центроид Y: {:.6f} мм".format(centroid_y))
-        self.rms_x_label.setText("RMS X: {:.6f} мм".format(rms_x))
-        self.rms_y_label.setText("RMS Y: {:.6f} мм".format(rms_y))
+        # Update centroid and RMS information
+        self.centroid_x_label.setText("Centroid X: {:.6f} mm".format(centroid_x))
+        self.centroid_y_label.setText("Centroid Y: {:.6f} mm".format(centroid_y))
+        self.rms_x_label.setText("RMS X: {:.6f} mm".format(rms_x))
+        self.rms_y_label.setText("RMS Y: {:.6f} mm".format(rms_y))
         
-        print("BackgroundTab: Графики фона успешно обновлены")
+        print("BackgroundTab: Background plots successfully updated")
         
     def update_tab(self):
         """
-        Обновляет содержимое вкладки
+        Updates tab content
         """
-        print("BackgroundTab: Обновление вкладки")
+        print("BackgroundTab: Updating tab")
         
-        # Проверяем наличие фона в зависимости от режима
+        # Check for background presence depending on mode
         if self.main_window.current_mode == "camera":
             has_background = self.main_window.image_reader.background is not None
         else:
@@ -278,7 +278,7 @@ class BackgroundTab(QWidget):
         
         self.update_camera_info()
         if has_background:
-            print("BackgroundTab.update_tab: Вызываем update_plots, так как фон есть")
+            print("BackgroundTab.update_tab: Calling update_plots as background exists")
             self.update_plots()
         else:
-            print("BackgroundTab.update_tab: Пропускаем update_plots, так как фона нет")
+            print("BackgroundTab.update_tab: Skipping update_plots as background doesn't exist")

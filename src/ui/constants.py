@@ -1,18 +1,18 @@
 """
-Модуль с константами для пользовательского интерфейса
+Module with constants for the user interface
 """
 
-# Константа для стандартизации верхнего отступа во всех вкладках
+# Constant for standardizing the top margin in all tabs
 TOP_PANEL_HEIGHT = 180 
 
-# Константы для кнопок
+# Constants for buttons
 BUTTON_MIN_WIDTH = 120
 BUTTON_MIN_HEIGHT = 25
 
-# Константы отступов
+# Constants for margins
 DEFAULT_MARGIN = 5
 DEFAULT_SPACING = 5
 
-# Константы для графиков
+# Constants for plots
 PLOT_MIN_WIDTH = 400
 PLOT_MIN_HEIGHT = 400 
