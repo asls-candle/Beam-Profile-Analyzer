@@ -507,9 +507,69 @@ class DataImporter:
         return normalized
 
     @staticmethod
+    def is_data_folder(path):
+        """
+        Проверяет, является ли указанный путь папкой с данными анализатора профиля пучка
+        
+        Args:
+            path: Путь к папке или файлу
+            
+        Returns:
+            bool: True если это папка с данными, иначе False
+        """
+        # Если путь указывает на файл, проверяем его папку
+        if os.path.isfile(path) and os.path.basename(path) == 'metadata.json':
+            path = os.path.dirname(path)
+        
+        # Проверяем, является ли путь папкой
+        if not os.path.isdir(path):
+            return False
+            
+        # Проверяем наличие метаданных
+        metadata_path = os.path.join(path, 'metadata.json')
+        if not os.path.isfile(metadata_path):
+            return False
+            
+        # Проверяем наличие хотя бы одного из основных CSV файлов
+        expected_files = ['shot.csv', 'background.csv', 'difference.csv']
+        found = False
+        for filename in expected_files:
+            if os.path.isfile(os.path.join(path, filename)):
+                found = True
+                break
+                
+        return found
+    
+    @staticmethod
+    def import_folder(folder_path):
+        """
+        Импортирует данные из папки с метаданными и CSV файлами
+        
+        Args:
+            folder_path: Путь к папке с данными
+            
+        Returns:
+            dict: Словарь с импортированными данными или None в случае ошибки
+        """
+        # Если путь указывает на файл metadata.json, берем его директорию
+        if os.path.isfile(folder_path) and os.path.basename(folder_path) == 'metadata.json':
+            metadata_filepath = folder_path
+            folder_path = os.path.dirname(folder_path)
+        else:
+            # Проверяем, что это папка с данными
+            if not DataImporter.is_data_folder(folder_path):
+                print(f"Указанный путь не является папкой с данными: {folder_path}")
+                logger.error(f"Указанный путь не является папкой с данными: {folder_path}")
+                return None
+                
+            metadata_filepath = os.path.join(folder_path, 'metadata.json')
+        
+        return DataImporter.import_multifile_csv(metadata_filepath)
+    
+    @staticmethod
     def import_multifile_csv(metadata_filepath):
         """
-        Импортирует данные из набора файлов: JSON метаданные и отдельные CSV файлы для массивов
+        Импортирует данные из набора файлов в папке: JSON метаданные и чистые CSV файлы для массивов
         
         Args:
             metadata_filepath: Путь к JSON файлу с метаданными
@@ -518,7 +578,7 @@ class DataImporter:
             dict: Словарь с импортированными данными или None в случае ошибки
         """
         try:
-            logger.info("Начало импорта данных из JSON и CSV файлов: {}".format(metadata_filepath))
+            logger.info("Начало импорта данных из папки: {}".format(metadata_filepath))
             
             if not os.path.exists(metadata_filepath):
                 print(f"Файл метаданных не найден: {metadata_filepath}")
@@ -529,33 +589,44 @@ class DataImporter:
             with open(metadata_filepath, 'r', encoding='utf-8') as f:
                 result_data = json.load(f)
                 
-            # Определяем базовый путь и имя для поиска файлов массивов
-            base_dir = os.path.dirname(metadata_filepath)
-            base_filename = os.path.splitext(os.path.basename(metadata_filepath))[0]
-            base_filename = base_filename.replace('_metadata', '')  # Удаляем суффикс _metadata, если есть
+            # Определяем папку, в которой находятся файлы
+            folder_path = os.path.dirname(metadata_filepath)
             
-            # Ищем файлы с массивами (shot, background, difference и другие)
-            expected_arrays = ['shot', 'background', 'difference']
+            # Если в метаданных есть информация о массивах, используем её
+            expected_arrays = []
+            if 'arrays' in result_data:
+                expected_arrays = list(result_data['arrays'].keys())
+            else:
+                # Иначе используем стандартный набор
+                expected_arrays = ['shot', 'background', 'difference']
             
             for array_name in expected_arrays:
-                array_path = os.path.join(base_dir, f"{base_filename}_{array_name}.csv")
+                array_path = os.path.join(folder_path, f"{array_name}.csv")
                 
                 if not os.path.exists(array_path):
                     logger.warning(f"Файл массива не найден: {array_path}")
                     continue
                     
-                # Импортируем массив из CSV
+                # Импортируем массив из CSV (только числа, без заголовков)
                 try:
                     # Читаем файл построчно
                     with open(array_path, 'r', encoding='utf-8') as f:
                         lines = f.readlines()
                     
-                    # Пропускаем строки с комментариями (# в начале)
-                    data_rows = []
-                    for line in lines:
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            data_rows.append(line)
+                    # Получаем форму массива из метаданных, если есть
+                    shape = None
+                    if 'arrays' in result_data and array_name in result_data['arrays']:
+                        shape_str = result_data['arrays'][array_name]['shape']
+                        if isinstance(shape_str, list):
+                            shape = tuple(shape_str)
+                        elif isinstance(shape_str, str):
+                            # Преобразуем строку '(rows, cols)' в кортеж
+                            shape_match = re.search(r'\((\d+), (\d+)\)', shape_str)
+                            if shape_match:
+                                shape = (int(shape_match.group(1)), int(shape_match.group(2)))
+                    
+                    # Убираем пустые строки
+                    data_rows = [line.strip() for line in lines if line.strip()]
                     
                     # Преобразуем строки в numpy массив
                     if data_rows:
@@ -563,6 +634,15 @@ class DataImporter:
                             # Сначала пытаемся разделить по запятой (CSV)
                             data_array = np.array([[float(val) for val in row.split(',')] 
                                                 for row in data_rows])
+                            
+                            # Если указана форма и текущая форма не соответствует, пробуем изменить
+                            if shape and data_array.shape != shape:
+                                try:
+                                    # Попробуем преобразовать массив к правильной форме
+                                    data_array = data_array.flatten().reshape(shape)
+                                except:
+                                    logger.warning(f"Не удалось преобразовать массив {array_name} к форме {shape}")
+                            
                             result_data[array_name] = data_array
                             logger.info(f"Успешно импортирован массив: {array_name}, форма: {data_array.shape}")
                         except ValueError:
@@ -570,6 +650,14 @@ class DataImporter:
                             try:
                                 data_array = np.array([[float(val) for val in row.split()] 
                                                     for row in data_rows])
+                                
+                                # Проверяем форму
+                                if shape and data_array.shape != shape:
+                                    try:
+                                        data_array = data_array.flatten().reshape(shape)
+                                    except:
+                                        logger.warning(f"Не удалось преобразовать массив {array_name} к форме {shape}")
+                                
                                 result_data[array_name] = data_array
                                 logger.info(f"Успешно импортирован массив: {array_name}, форма: {data_array.shape}")
                             except Exception as e:
@@ -603,9 +691,9 @@ class DataImporter:
             if 'rms' not in result_data:
                 result_data['rms'] = (0, 0)
             if 'filepath' not in result_data:
-                result_data['filepath'] = metadata_filepath
+                result_data['filepath'] = folder_path
             
-            logger.info(f"Успешно импортированы данные из набора файлов: {metadata_filepath}")
+            logger.info(f"Успешно импортированы данные из папки: {folder_path}")
             return result_data
             
         except Exception as e:
@@ -616,26 +704,38 @@ class DataImporter:
     @staticmethod
     def import_data(filepath):
         """
-        Импортирует данные из файла, определяя его тип
+        Импортирует данные из MAT-файла или папки с данными
         
         Args:
-            filepath: Путь к файлу
+            filepath: Путь к файлу MAT или папке с данными
             
         Returns:
             dict: Словарь с импортированными данными или None в случае ошибки
         """
         if not os.path.exists(filepath):
-            print("Файл не найден: {}".format(filepath))
+            print("Файл или папка не найдены: {}".format(filepath))
+            logger.error("Файл или папка не найдены: {}".format(filepath))
             return None
-            
-        file_ext = os.path.splitext(filepath)[1].lower()
         
-        if file_ext == '.mat':
-            return DataImporter.import_mat(filepath)
-        elif file_ext == '.csv':
-            return DataImporter.import_csv(filepath)
-        elif file_ext == '.json' and '_metadata' in filepath:
+        # Проверяем, является ли путь папкой с данными
+        if os.path.isdir(filepath) and DataImporter.is_data_folder(filepath):
+            print(f"Импорт данных из папки: {filepath}")
+            logger.info(f"Импорт данных из папки: {filepath}")
+            return DataImporter.import_folder(filepath)
+            
+        # Проверяем, указывает ли путь на metadata.json в папке с данными
+        if os.path.isfile(filepath) and os.path.basename(filepath) == "metadata.json":
+            print(f"Импорт данных из метафайла: {filepath}")
+            logger.info(f"Импорт данных из метафайла: {filepath}")
             return DataImporter.import_multifile_csv(filepath)
+            
+        # Если это MAT-файл
+        file_ext = os.path.splitext(filepath)[1].lower()
+        if file_ext == '.mat':
+            print(f"Импорт данных из MAT файла: {filepath}")
+            logger.info(f"Импорт данных из MAT файла: {filepath}")
+            return DataImporter.import_mat(filepath)
         else:
-            print("Неподдерживаемый формат файла: {}".format(file_ext))
+            print(f"Неподдерживаемый формат файла: {filepath}")
+            logger.error(f"Неподдерживаемый формат файла: {filepath}")
             return None

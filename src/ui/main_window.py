@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import (QMainWindow, QTabWidget, QMessageBox, 
                            QFileDialog, QVBoxLayout, QWidget)
 from PyQt5.QtCore import QSettings
+import os
 
 from src.ui.camera_tab import CameraTab
 from src.ui.background_tab import BackgroundTab
@@ -250,16 +251,16 @@ class MainWindow(QMainWindow):
                 }
             return None
             
-    def export_data(self, filepath, export_format="csv"):
+    def export_data(self, filepath, export_format="folder"):
         """
         Exports data to the specified format
         
         Args:
             filepath: Path to save file/directory
-            export_format: Export format ("csv", "png")
+            export_format: Export format ("folder" for CSV+JSON, "png")
             
         Returns:
-            bool: True if export successful, False otherwise
+            str: Path to the created data folder or None if export failed
         """
         # Get current data
         data = self.get_current_data()
@@ -268,7 +269,7 @@ class MainWindow(QMainWindow):
         # If there is no data or camera information
         if data["current_frame"] is None or camera_info is None:
             QMessageBox.warning(self, "Warning", "No data to export")
-            return False
+            return None
             
         # Form export dictionary
         export_data = {
@@ -289,7 +290,7 @@ class MainWindow(QMainWindow):
         result = DataExporter.export_data(filepath, export_data, export_format, self.plot_manager)
         
         if result:
-            QMessageBox.information(self, "Information", "Data successfully exported to {}".format(filepath))
+            QMessageBox.information(self, "Information", f"Data successfully exported to {result}")
         else:
             QMessageBox.warning(self, "Warning", "Error exporting data")
             
@@ -434,56 +435,80 @@ class MainWindow(QMainWindow):
         
     def open_file_dialog(self):
         """
-        Opens file selection dialog for import
+        Открывает диалог выбора формата данных (MAT или папка с данными)
         
         Returns:
-            bool: True if file selected and imported, False otherwise
+            bool: True если данные успешно импортированы, False иначе
         """
-        filepath, _ = QFileDialog.getOpenFileName(
+        # Фильтры для выбора типа файлов
+        filters = [
+            "MAT файлы (*.mat)",
+            "Папки с данными (metadata.json)"
+        ]
+        filter_string = ";;".join(filters)
+        
+        # Открываем диалог выбора файла
+        filepath, selected_filter = QFileDialog.getOpenFileName(
             self,
-            "Open file",
+            "Импорт данных",
             "",
-            "Data files (*.mat *.csv);;CSV files (*.csv);;MAT files (*.mat);;All files (*)"
+            filter_string,
+            filters[0]  # По умолчанию MAT-файлы
         )
         
-        if filepath:
-            return self.import_data(filepath)
+        if not filepath:
+            return False
             
-        return False
+        # Определяем выбранный формат
+        if selected_filter == filters[0]:  # MAT файлы
+            # Импортируем MAT-файл напрямую
+            return self.import_data(filepath)
+        else:  # Папки с данными
+            # Проверяем, выбран ли файл metadata.json
+            if os.path.basename(filepath) == "metadata.json":
+                # Импортируем данные из папки
+                return self.import_data(filepath)
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Неверный выбор",
+                    "Для импорта папки с данными необходимо выбрать файл metadata.json из этой папки."
+                )
+                return False
         
-    def save_file_dialog(self, default_format="csv"):
+    def save_file_dialog(self, default_format="folder"):
         """
-        Opens file save dialog for export
+        Opens dialog for exporting data to a folder
         
         Args:
-            default_format: Default export format ("csv", "png")
+            default_format: Default export format ("folder", "png")
             
         Returns:
-            bool: True if data successfully exported, False otherwise
+            str: Path to the created data folder or None if export cancelled or failed
         """
         # Formats and filters
         formats = {
-            "csv": "CSV files (*.csv)",
-            "png": "PNG images (folder)"
+            "folder": "Data folder (CSV+JSON)",
+            "png": "PNG images folder"
         }
         
         # Filter string
         filter_str = ";;".join(formats.values())
         
         # Select default format
-        default_filter = formats.get(default_format, formats["csv"])
+        default_filter = formats.get(default_format, formats["folder"])
         
-        # Open save dialog
+        # Open save dialog - using getSaveFileName but will create a folder
         filepath, selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Save data",
+            "Save data to folder",
             "",
             filter_str,
             default_filter
         )
         
         if not filepath:
-            return False
+            return None
             
         # Determine selected format
         export_format = None
@@ -495,11 +520,7 @@ class MainWindow(QMainWindow):
         if export_format is None:
             export_format = default_format
             
-        # Add extension if it's missing
-        if export_format != "png" and not filepath.endswith(".{}".format(export_format)):
-            filepath += ".{}".format(export_format)
-            
-        # Export data
+        # Export data - will create a folder at the specified path
         return self.export_data(filepath, export_format)
         
     def closeEvent(self, event):

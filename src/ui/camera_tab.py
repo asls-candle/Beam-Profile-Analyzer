@@ -614,4 +614,7 @@ class CameraTab(QWidget):
         """
         Handler for export data button press
         """
-        self.main_window.save_file_dialog()
+        export_path = self.main_window.save_file_dialog()
+        if export_path:
+            # Показываем сообщение о том, где сохранены данные
+            self.main_window.statusBar().showMessage(f"Data exported to: {export_path}", 5000)

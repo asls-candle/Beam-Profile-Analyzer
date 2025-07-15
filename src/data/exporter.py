@@ -13,25 +13,20 @@ class DataExporter:
     """
     
     @staticmethod
-    def export_csv(filepath, data_dict):
+    def export_csv(folder_path, data_dict):
         """
-        Экспортирует данные в формате JSON для метаданных и отдельных CSV файлов для каждого массива
+        Экспортирует данные в отдельную папку: JSON для метаданных и чистые CSV файлы для массивов
         
         Args:
-            filepath: Базовый путь для сохранения файлов
+            folder_path: Путь к папке для сохранения
             data_dict: Словарь с данными для экспорта
             
         Returns:
             bool: True если экспорт успешен, иначе False
         """
         try:
-            # Создаем директорию для файлов если ее нет
-            base_dir = os.path.dirname(filepath)
-            if base_dir:
-                os.makedirs(base_dir, exist_ok=True)
-            
-            # Получаем базовое имя файла без расширения
-            base_filename = os.path.splitext(os.path.basename(filepath))[0]
+            # Создаем директорию для файлов
+            os.makedirs(folder_path, exist_ok=True)
             
             # Создаем словарь с метаданными (все, кроме массивов)
             metadata = {}
@@ -39,30 +34,35 @@ class DataExporter:
                 if not isinstance(value, np.ndarray):
                     metadata[key] = value
             
+            # Добавляем информацию о размерах массивов в метаданные
+            metadata['arrays'] = {}
+            for key, value in data_dict.items():
+                if isinstance(value, np.ndarray):
+                    metadata['arrays'][key] = {
+                        'shape': value.shape,
+                        'dtype': str(value.dtype)
+                    }
+            
             # Экспортируем метаданные в JSON
-            json_path = os.path.join(base_dir, f"{base_filename}_metadata.json")
+            json_path = os.path.join(folder_path, "metadata.json")
             with open(json_path, 'w', encoding='utf-8') as jsonfile:
                 json.dump(metadata, jsonfile, indent=4, default=str)
             
-            # Экспортируем массивы в отдельные CSV файлы
+            # Экспортируем массивы в отдельные CSV файлы без метаинформации
             for key, value in data_dict.items():
                 if isinstance(value, np.ndarray):
-                    array_path = os.path.join(base_dir, f"{base_filename}_{key}.csv")
+                    array_path = os.path.join(folder_path, f"{key}.csv")
                     with open(array_path, 'w', newline='') as csvfile:
                         writer = csv.writer(csvfile)
                         
-                        # Записываем информацию о массиве
-                        writer.writerow(["# Array", key])
-                        writer.writerow(["# Shape", str(value.shape)])
-                        
-                        # Записываем данные массива с 7 знаками после запятой
+                        # Записываем только числа без заголовков
                         if value.ndim == 2:  # Для двумерных массивов
                             for row in value:
                                 writer.writerow(["{:.7f}".format(x) for x in row])
                         else:  # Для других размерностей
                             writer.writerow(["{:.7f}".format(x) for x in value.flatten()])
             
-            print(f"Экспортированы: метаданные в {json_path} и массивы в отдельные CSV файлы.")
+            print(f"Экспортированы данные в папку {folder_path}: метаданные и массивы в отдельных CSV файлах.")
             return True
             
         except Exception as e:
@@ -174,41 +174,46 @@ class DataExporter:
             return False
             
     @staticmethod
-    def export_data(filepath, data, export_format="csv", plot_manager=None):
+    def export_data(folder_path, data, export_format="folder", plot_manager=None):
         """
-        Экспортирует данные в указанном формате
+        Экспортирует данные в папку выбранного формата
         
         Args:
-            filepath: Путь для сохранения файла/директории
+            folder_path: Базовый путь для создания папки с данными
             data: Словарь с данными для экспорта
-            export_format: Формат экспорта ("csv", "png")
+            export_format: Формат экспорта ("folder" для CSV+JSON, "png" для PNG изображений)
             plot_manager: Экземпляр PlotManager для построения графиков (нужен для PNG)
             
         Returns:
-            bool: True если экспорт успешен, иначе False
+            str: Путь к созданной папке с данными или None в случае ошибки
         """
         try:
             # Добавляем текущую дату и время
             data["date"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
+            # Формируем название папки с датой и временем
+            base_name = os.path.basename(folder_path)
+            base_name_without_ext = os.path.splitext(base_name)[0]
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            folder_name = "{}_{}".format(base_name_without_ext, timestamp)
+            target_folder = os.path.join(os.path.dirname(folder_path), folder_name)
+            
             # Экспортируем в зависимости от формата
-            if export_format.lower() == "csv":
-                return DataExporter.export_csv(filepath, data)
+            if export_format.lower() in ["folder", "csv"]:
+                success = DataExporter.export_csv(target_folder, data)
+                if success:
+                    print(f"Данные успешно сохранены в папку: {target_folder}")
+                    return target_folder
+                return None
             elif export_format.lower() == "png":
-                # Берем базовое имя файла без расширения
-                base_name = os.path.basename(filepath)
-                # Удаляем расширение файла, если оно есть
-                base_name_without_ext = os.path.splitext(base_name)[0]
-                
-                # Создаем папку с датой и временем в названии, используя разделитель между датой и временем
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                folder_name = "{}_{}".format(base_name_without_ext, timestamp)
-                folder_path = os.path.join(os.path.dirname(filepath), folder_name)
-                
-                return DataExporter.export_png(folder_path, data, plot_manager)
+                success = DataExporter.export_png(target_folder, data, plot_manager)
+                if success:
+                    print(f"Изображения успешно сохранены в папку: {target_folder}")
+                    return target_folder
+                return None
             else:
                 print("Неизвестный формат экспорта: {}".format(export_format))
-                return False
+                return None
         except Exception as e:
             print("Ошибка при экспорте данных: {}".format(e))
-            return False
+            return None
