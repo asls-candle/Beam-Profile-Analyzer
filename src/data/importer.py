@@ -8,6 +8,8 @@ import json
 import logging
 logger = logging.getLogger('data')
 
+from src.analysis.normalizer import ImageNormalizer
+
 class DataImporter:
     """
     Класс для импорта данных профиля пучка
@@ -100,9 +102,9 @@ class DataImporter:
             
             # Нормализуем данные
             logger.debug("Начало нормализации данных снимка")
-            normalized_shot = DataImporter._normalize_array(shot)
+            normalized_shot = ImageNormalizer.normalize(shot)
             logger.debug("Начало нормализации данных фона")
-            normalized_background = DataImporter._normalize_array(background)
+            normalized_background = ImageNormalizer.normalize(background)
             
             # Вычитаем фон если он есть
             if background is not None:
@@ -300,17 +302,17 @@ class DataImporter:
                 
                 # Нормализуем данные
                 logger.debug("Начало нормализации данных снимка")
-                normalized_shot = DataImporter._normalize_array(shot)
+                normalized_shot = ImageNormalizer.normalize(shot)
                 logger.debug("Начало нормализации данных фона")
-                normalized_background = DataImporter._normalize_array(background)
+                normalized_background = ImageNormalizer.normalize(background)
                 
                 # Вычитаем фон если он есть
                 if background is not None:
                     # Проверяем совпадение размеров
                     if shot.shape == background.shape:
                         # Сначала нормализуем оба массива
-                        normalized_shot = DataImporter._normalize_array(shot)
-                        normalized_background = DataImporter._normalize_array(background)
+                        normalized_shot = ImageNormalizer.normalize(shot)
+                        normalized_background = ImageNormalizer.normalize(background)
                         # Вычитаем фон и обрезаем отрицательные значения
                         difference = normalized_shot - normalized_background
                         difference[difference < 0] = 0
@@ -470,41 +472,6 @@ class DataImporter:
             "pixel_size_y": 1.0,
             "name": "Неизвестная камера"
         }
-
-    @staticmethod
-    def _normalize_array(array):
-        """
-        Нормализует массив в диапазон [0, 1]
-        
-        Args:
-            array: Массив для нормализации
-            
-        Returns:
-            numpy.ndarray: Нормализованный массив
-        """
-        logger.debug("Нормализация массива размером {}".format(array.shape if hasattr(array, 'shape') else 'неизвестно'))
-        if array is None or array.size == 0:
-            logger.warning("Пустой массив на входе. Возвращается нулевой массив.")
-            return np.zeros((1, 1), dtype=np.float64)
-            
-        # Преобразование в тип float64 для большей точности
-        array_float = array.astype(np.float64)
-        
-        # Находим минимальное и максимальное значение
-        min_val = np.min(array_float)
-        max_val = np.max(array_float)
-        logger.debug("Диапазон значений в массиве: [{}, {}]".format(min_val, max_val))
-        
-        # Избегаем деления на ноль
-        if max_val == min_val:
-            logger.warning("Массив содержит одинаковые значения. Возвращается нулевой массив.")
-            return np.zeros_like(array_float, dtype=np.float64)
-        
-        # Нормализация в диапазон [0, 1]
-        normalized = (array_float - min_val) / (max_val - min_val)
-        logger.debug("Нормализация массива завершена успешно")
-        
-        return normalized
 
     @staticmethod
     def is_data_folder(path):

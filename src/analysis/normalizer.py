@@ -1,4 +1,7 @@
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ImageNormalizer:
     """
@@ -30,7 +33,9 @@ class ImageNormalizer:
         Returns:
             Нормализованный двумерный массив значений светимости
         """
+        logger.debug("Нормализация массива размером {}".format(image.shape if hasattr(image, 'shape') else 'неизвестно'))
         if image is None or image.size == 0:
+            logger.warning("Пустой массив на входе. Возвращается нулевой массив.")
             return np.zeros((1, 1), dtype=np.float64)
             
         # Преобразование в тип float64 для большей точности
@@ -39,13 +44,16 @@ class ImageNormalizer:
         # Находим минимальное и максимальное значение
         min_val = np.min(image_float)
         max_val = np.max(image_float)
+        logger.debug("Диапазон значений в массиве: [{}, {}]".format(min_val, max_val))
         
         # Избегаем деления на ноль
         if max_val == min_val:
+            logger.warning("Массив содержит одинаковые значения. Возвращается нулевой массив.")
             return np.zeros_like(image_float, dtype=np.float64)
         
         # Нормализация в диапазон [0, 1]
         normalized = (image_float - min_val) / (max_val - min_val)
+        logger.debug("Нормализация массива завершена успешно")
         
         return normalized
         
