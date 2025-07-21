@@ -280,9 +280,10 @@ class ImageReader:
         """
         Вычисляет разницу между текущим кадром и фоном.
         
-        Выполняет вычитание фонового изображения из текущего кадра,
-        заменяя все отрицательные значения на ноль. Результат сохраняется
-        в атрибуте self.difference.
+        Сначала выполняет вычитание необработанного фонового изображения из 
+        необработанного текущего кадра, затем нормализует результат.
+        Все отрицательные значения заменяются на ноль.
+        Результат сохраняется в атрибуте self.difference.
         
         Примечание:
             Метод предполагает, что блокировки self.frame_lock и 
@@ -291,16 +292,20 @@ class ImageReader:
         Returns:
             bool: True если вычитание успешно, False в случае ошибки
         """
-        if self.current_frame is None or self.background is None:
+        if self.raw_current_frame is None or self.raw_background is None:
             return False
             
-        if self.current_frame.shape != self.background.shape:
+        if self.raw_current_frame.shape != self.raw_background.shape:
             print("Размеры текущего кадра и фона не совпадают: текущий кадр {}, фон {}".format(
-                self.current_frame.shape, self.background.shape))
+                self.raw_current_frame.shape, self.raw_background.shape))
             return False
             
-        # Вычитаем фон и обрезаем отрицательные значения
-        diff = self.current_frame - self.background
-        diff[diff < 0] = 0
-        self.difference = diff
+        # Вычитаем необработанный фон из необработанного кадра
+        raw_diff = self.raw_current_frame - self.raw_background
+        
+        # Обрезаем отрицательные значения
+        raw_diff[raw_diff < 0] = 0
+        
+        # Нормализуем результат
+        self.difference = ImageNormalizer.normalize(raw_diff)
         return True

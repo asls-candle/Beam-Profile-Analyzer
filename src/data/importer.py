@@ -100,22 +100,21 @@ class DataImporter:
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
             logger.info("Определена камера: {}".format(camera_info['name']))
             
-            # Нормализуем данные
-            logger.debug("Начало нормализации данных снимка")
-            normalized_shot = ImageNormalizer.normalize(shot)
-            logger.debug("Начало нормализации данных фона")
-            normalized_background = ImageNormalizer.normalize(background)
-            
             # Вычитаем фон если он есть
             if background is not None:
                 # Проверяем совпадение размеров
-                if normalized_shot.shape == normalized_background.shape:
-                    # Вычитаем фон и обрезаем отрицательные значения
-                    difference = normalized_shot - normalized_background
-                    difference[difference < 0] = 0
+                if shot.shape == background.shape:
+                    # Сначала вычитаем необработанный фон, затем нормализуем
+                    raw_difference = shot - background
+                    raw_difference[raw_difference < 0] = 0
+                    difference = ImageNormalizer.normalize(raw_difference)
                 else:
                     print("Размеры снимка и фона не совпадают")
                     difference = None
+            
+            # Нормализуем снимок и фон для возврата
+            normalized_shot = ImageNormalizer.normalize(shot)
+            normalized_background = ImageNormalizer.normalize(background) if background is not None else None
             
             # Формируем результирующий словарь
             logger.debug("Формирование результирующего словаря с данными")
@@ -300,25 +299,21 @@ class DataImporter:
                     camera_info = DataImporter._determine_camera_by_shape(shot.shape)
                     result_data.update(camera_info)
                 
-                # Нормализуем данные
-                logger.debug("Начало нормализации данных снимка")
-                normalized_shot = ImageNormalizer.normalize(shot)
-                logger.debug("Начало нормализации данных фона")
-                normalized_background = ImageNormalizer.normalize(background)
-                
                 # Вычитаем фон если он есть
                 if background is not None:
                     # Проверяем совпадение размеров
                     if shot.shape == background.shape:
-                        # Сначала нормализуем оба массива
-                        normalized_shot = ImageNormalizer.normalize(shot)
-                        normalized_background = ImageNormalizer.normalize(background)
-                        # Вычитаем фон и обрезаем отрицательные значения
-                        difference = normalized_shot - normalized_background
-                        difference[difference < 0] = 0
+                        # Сначала вычитаем необработанный фон, затем нормализуем
+                        raw_difference = shot - background
+                        raw_difference[raw_difference < 0] = 0
+                        difference = ImageNormalizer.normalize(raw_difference)
                     else:
                         print("Размеры снимка и фона не совпадают")
                         difference = None
+                
+                # Нормализуем снимок и фон для возврата
+                normalized_shot = ImageNormalizer.normalize(shot)
+                normalized_background = ImageNormalizer.normalize(background) if background is not None else None
                 
                 # Добавляем нормализованные данные и разницу
                 result_data['shot'] = normalized_shot
