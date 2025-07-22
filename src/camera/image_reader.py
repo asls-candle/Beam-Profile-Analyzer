@@ -3,6 +3,8 @@ from threading import Thread, Event, Lock
 import time
 
 from src.analysis.normalizer import ImageNormalizer
+from src.analysis.image_analyzer import ImageAnalyzer
+from src.ui.constants import GAUSSIAN_FILTER_SIGMA_THRESHOLD
 
 class ImageReader:
     """
@@ -18,6 +20,7 @@ class ImageReader:
     - Сбор и усреднение фоновых кадров для компенсации фона
     - Автоматическое вычитание фона из текущего кадра
     - Нормализация изображений для единообразного отображения и анализа
+    - Гауссовская фильтрация для удаления артефактов за пределами 3σ
     - Многопоточная архитектура для одновременной обработки и отображения
     
     Attributes:
@@ -27,6 +30,7 @@ class ImageReader:
         background: Нормализованное фоновое изображение
         raw_background: Необработанное фоновое изображение
         difference: Разница между текущим кадром и фоном
+        filtered_difference: Отфильтрованная разница (после гауссовской фильтрации)
         reading_thread: Поток для непрерывного считывания кадров
         stop_reading: Событие для остановки потока чтения
         frame_lock: Блокировка для синхронизации доступа к кадрам
@@ -35,6 +39,8 @@ class ImageReader:
         background_frames: Список собранных фоновых кадров
         background_frames_count: Количество кадров для сбора фона
         background_collection_thread: Поток для сбора фона
+        enable_gaussian_filter: Флаг включения гауссовской фильтрации
+        image_analyzer: Экземпляр ImageAnalyzer для применения фильтрации
     """
     def __init__(self, camera_manager):
         """
@@ -49,6 +55,7 @@ class ImageReader:
         self.background = None
         self.raw_background = None
         self.difference = None
+        self.filtered_difference = None  # Отфильтрованная разница
         
         # Для работы в режиме непрерывного чтения
         self.reading_thread = None
@@ -61,6 +68,19 @@ class ImageReader:
         self.background_frames = []
         self.background_frames_count = 40
         self.background_collection_thread = None
+        
+        # Настройки гауссовской фильтрации
+        self.enable_gaussian_filter = True  # По умолчанию включена
+        self.image_analyzer = ImageAnalyzer()  # Для применения фильтрации
+        
+    def set_gaussian_filter_enabled(self, enabled):
+        """
+        Включает или выключает гауссовскую фильтрацию
+        
+        Args:
+            enabled: True для включения, False для выключения
+        """
+        self.enable_gaussian_filter = enabled
         
     def start_preview(self):
         """
@@ -102,7 +122,8 @@ class ImageReader:
         2. Сохраняет исходный (необработанный) кадр
         3. Нормализует кадр в диапазон [0,1]
         4. Вычисляет разницу между текущим кадром и фоном (если фон доступен)
-        5. Отрицательные значения разницы обрезаются до нуля
+        5. Применяет гауссовскую фильтрацию к разнице (если включена)
+        6. Отрицательные значения разницы обрезаются до нуля
         
         Метод содержит блокировку потока для безопасного доступа к общим ресурсам
         и небольшую задержку между итерациями для снижения нагрузки на систему.
@@ -168,13 +189,39 @@ class ImageReader:
             
     def get_difference(self):
         """
-        Возвращает разницу между текущим кадром и фоном
+        Возвращает разницу между текущим кадром и фоном.
+        
+        Если гауссовская фильтрация включена, возвращает отфильтрованную версию,
+        иначе возвращает исходную разницу.
         
         Returns:
-            Разница между текущим кадром и фоном
+            Разница между текущим кадром и фоном (отфильтрованная или исходная)
+        """
+        with self.frame_lock, self.background_lock:
+            if self.enable_gaussian_filter and self.filtered_difference is not None:
+                return self.filtered_difference.copy()
+            else:
+                return self.difference.copy() if self.difference is not None else None
+    
+    def get_unfiltered_difference(self):
+        """
+        Возвращает неотфильтрованную разницу между текущим кадром и фоном
+        
+        Returns:
+Теперь добавлю элементы управления гауссовской фильтрацией в UI:            Исходная (неотфильтрованная) разница между текущим кадром и фоном
         """
         with self.frame_lock, self.background_lock:
             return self.difference.copy() if self.difference is not None else None
+            
+    def get_filtered_difference(self):
+        """
+        Возвращает отфильтрованную разницу между текущим кадром и фоном
+        
+        Returns:
+            Отфильтрованная разница между текущим кадром и фоном
+        """
+        with self.frame_lock, self.background_lock:
+            return self.filtered_difference.copy() if self.filtered_difference is not None else None
     
     def start_background_collection(self, frames_count=40):
         """
@@ -285,6 +332,9 @@ class ImageReader:
         Все отрицательные значения заменяются на ноль.
         Результат сохраняется в атрибуте self.difference.
         
+        Если включена гауссовская фильтрация, также создает отфильтрованную версию
+        и сохраняет её в self.filtered_difference.
+        
         Примечание:
             Метод предполагает, что блокировки self.frame_lock и 
             self.background_lock уже установлены вызывающим кодом.
@@ -308,4 +358,32 @@ class ImageReader:
         
         # Нормализуем результат
         self.difference = ImageNormalizer.normalize(raw_diff)
+        
+        # Применяем гауссовскую фильтрацию если включена
+        if self.enable_gaussian_filter and self.difference is not None:
+            # Получаем информацию о камере для размеров пикселей
+            camera_info = self.camera_manager.get_camera_info()
+            if camera_info:
+                pixel_size_x = camera_info.get("pixel_size_x", 1.0)
+                pixel_size_y = camera_info.get("pixel_size_y", 1.0)
+                
+                try:
+                    # Применяем гауссовскую фильтрацию
+                    self.filtered_difference = self.image_analyzer.apply_gaussian_filter(
+                        self.difference, 
+                        pixel_size_x, 
+                        pixel_size_y, 
+                        GAUSSIAN_FILTER_SIGMA_THRESHOLD  # Используем константу для порога фильтрации
+                    )
+                    print("pydc1394: Применена гауссовская фильтрация с порогом {} σ".format(GAUSSIAN_FILTER_SIGMA_THRESHOLD))
+                except Exception as e:
+                    print("pydc1394: Ошибка при применении гауссовской фильтрации: {}".format(e))
+                    self.filtered_difference = self.difference
+            else:
+                print("pydc1394: Нет информации о камере для применения фильтрации")
+                self.filtered_difference = self.difference
+        else:
+            # Если фильтрация выключена, копируем исходную разницу
+            self.filtered_difference = self.difference
+            
         return True

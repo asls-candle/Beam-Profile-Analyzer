@@ -51,7 +51,7 @@ class DataExporter:
             # Экспортируем массивы в отдельные CSV файлы без метаинформации
             for key, value in data_dict.items():
                 if isinstance(value, np.ndarray):
-                    array_path = os.path.join(folder_path, f"{key}.csv")
+                    array_path = os.path.join(folder_path, "{}.csv".format(key))
                     with open(array_path, 'w', newline='') as csvfile:
                         writer = csv.writer(csvfile)
                         
@@ -62,7 +62,7 @@ class DataExporter:
                         else:  # Для других размерностей
                             writer.writerow(["{:.7f}".format(x) for x in value.flatten()])
             
-            print(f"Экспортированы данные в папку {folder_path}: метаданные и массивы в отдельных CSV файлах.")
+            print("Экспортированы данные в папку {}: метаданные и массивы в отдельных CSV файлах.".format(folder_path))
             return True
             
         except Exception as e:
@@ -160,13 +160,11 @@ class DataExporter:
                     # Проверяем размеры созданного файла для подтверждения
                     with Image.open(filepath) as img:
                         actual_width, actual_height = img.size
-                        print("Экспортировано изображение {}.png размером {}x{} ".format(name, actual_width, actual_height) 
-                              + "(ожидаемый размер: {}x{})".format(width, height))
+                        print("Экспортировано изображение {}.png размером {}x{} (ожидаемый размер: {}x{})".format(name, actual_width, actual_height, width, height))
                         
                         # Если размеры не совпадают, выводим предупреждение
                         if actual_width != width or actual_height != height:
-                            print("ВНИМАНИЕ: Размеры экспортированного изображения {}.png не соответствуют ".format(name) 
-                                  + "размерам данных с камеры!")
+                            print("ВНИМАНИЕ: Размеры экспортированного изображения {}.png не соответствуют размерам данных с камеры!".format(name))
             
             return True
         except Exception as e:
@@ -202,13 +200,13 @@ class DataExporter:
             if export_format.lower() in ["folder", "csv"]:
                 success = DataExporter.export_csv(target_folder, data)
                 if success:
-                    print(f"Данные успешно сохранены в папку: {target_folder}")
+                    print("Данные успешно сохранены в папку: {}".format(target_folder))
                     return target_folder
                 return None
             elif export_format.lower() == "png":
                 success = DataExporter.export_png(target_folder, data, plot_manager)
                 if success:
-                    print(f"Изображения успешно сохранены в папку: {target_folder}")
+                    print("Изображения успешно сохранены в папку: {}".format(target_folder))
                     return target_folder
                 return None
             else:

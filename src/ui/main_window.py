@@ -6,6 +6,7 @@ import os
 from src.ui.camera_tab import CameraTab
 from src.ui.background_tab import BackgroundTab
 from src.ui.difference_tab import DifferenceTab
+from src.ui.constants import GAUSSIAN_FILTER_SIGMA_THRESHOLD
 
 from src.camera.camera_manager import CameraManager
 from src.camera.image_reader import ImageReader
@@ -290,7 +291,7 @@ class MainWindow(QMainWindow):
         result = DataExporter.export_data(filepath, export_data, export_format, self.plot_manager)
         
         if result:
-            QMessageBox.information(self, "Information", f"Data successfully exported to {result}")
+            QMessageBox.information(self, "Information", "Data successfully exported to {}.".format(result))
         else:
             QMessageBox.warning(self, "Warning", "Error exporting data")
             
@@ -382,8 +383,23 @@ class MainWindow(QMainWindow):
                         pixel_size_y
                     )
                 
-                # Calculate centroid and RMS for image difference
+                # Apply Gaussian filtering to difference image and calculate centroid and RMS
                 if self.file_data["difference"] is not None:
+                    # Apply Gaussian filtering to remove artifacts beyond 3σ
+                    try:
+                        filtered_difference = self.image_analyzer.apply_gaussian_filter(
+                            self.file_data["difference"],
+                            pixel_size_x,
+                            pixel_size_y,
+                            GAUSSIAN_FILTER_SIGMA_THRESHOLD
+                        )
+                        # Replace original difference with filtered version
+                        self.file_data["difference"] = filtered_difference
+                        print("Применена гауссовская фильтрация к импортированному difference изображению")
+                    except Exception as filter_error:
+                        print("Ошибка при применении гауссовской фильтрации: {}".format(filter_error))
+                    
+                    # Calculate centroid and RMS for filtered difference image
                     self.file_data["difference_centroid"] = self.image_analyzer.calculate_centroid(
                         self.file_data["difference"],
                         pixel_size_x,

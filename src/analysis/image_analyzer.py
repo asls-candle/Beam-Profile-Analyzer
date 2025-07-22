@@ -1,5 +1,8 @@
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.ndimage import median_filter
+
+from src.ui.constants import GAUSSIAN_FILTER_SIGMA_THRESHOLD
 
 class ImageAnalyzer:
     """
@@ -16,6 +19,7 @@ class ImageAnalyzer:
     - Расчет среднеквадратичных (RMS) размеров пучка
     - Аппроксимация профилей пучка гауссовой функцией с определением 
       параметров распределения (амплитуда, центр, ширина)
+    - Гауссовская фильтрация для удаления артефактов за пределами 3σ
     
     Все пространственные расчеты могут быть выражены в физических единицах (мм)
     при условии, что предоставлены размеры пикселей по каждой из осей.
@@ -56,6 +60,101 @@ class ImageAnalyzer:
             
         x_min, y_min, x_max, y_max = self.roi
         return image[y_min:y_max, x_min:x_max]
+    
+    def apply_gaussian_filter(self, image, pixel_size_x, pixel_size_y, sigma_threshold=GAUSSIAN_FILTER_SIGMA_THRESHOLD):
+        """
+        Применяет гауссовскую фильтрацию для удаления артефактов за пределами заданного количества сигм.
+        
+        Метод использует итеративный подход: сначала находит главный максимум интенсивности,
+        затем рассчитывает центроид и RMS размеры только в окрестности этого максимума,
+        и создает эллиптическую маску для удаления отдаленных артефактов.
+        
+        Args:
+            image: Двумерный массив значений светимости
+            pixel_size_x: Размер пикселя по оси X (мм)
+            pixel_size_y: Размер пикселя по оси Y (мм)
+            sigma_threshold: Порог в единицах сигма (по умолчанию 2.0 для более строгой фильтрации)
+            
+        Returns:
+            Отфильтрованное изображение с удаленными артефактами
+        """
+        if image is None or image.size == 0:
+            return image
+            
+        # Применяем ROI если задан
+        processed_image = self.apply_roi(image)
+        if processed_image is None:
+            return image
+            
+        y_size, x_size = processed_image.shape
+        
+        # Этап 1: Найдем позицию главного максимума интенсивности
+        max_pos = np.unravel_index(np.argmax(processed_image), processed_image.shape)
+        max_y, max_x = max_pos
+        
+        # Этап 2: Создаем предварительную маску вокруг максимума (более широкую область)
+        # Используем примерную оценку размера пучка как 1/4 от размера изображения
+        rough_size_x = x_size // 5
+        rough_size_y = y_size // 5
+        
+        # Определяем границы предварительной области вокруг максимума
+        x_start = max(0, max_x - rough_size_x)
+        x_end = min(x_size, max_x + rough_size_x)
+        y_start = max(0, max_y - rough_size_y)
+        y_end = min(y_size, max_y + rough_size_y)
+        
+        # Создаем предварительную маску
+        preliminary_mask = np.zeros((y_size, x_size), dtype=bool)
+        preliminary_mask[y_start:y_end, x_start:x_end] = True
+        
+        # Применяем предварительную маску для расчета центроида основного пучка
+        masked_image = processed_image * preliminary_mask
+        
+        # Этап 3: Рассчитываем центроид и RMS только для основного пучка
+        x_proj = np.sum(masked_image, axis=0)
+        y_proj = np.sum(masked_image, axis=1)
+        
+        # Избегаем деления на ноль
+        x_sum = np.sum(x_proj)
+        y_sum = np.sum(y_proj)
+        
+        if x_sum == 0 or y_sum == 0:
+            return processed_image
+        
+        # Вычисляем взвешенное среднее положение (центроид) в пикселях для основного пучка
+        centroid_x_px = np.sum(np.arange(x_size) * x_proj) / x_sum
+        centroid_y_px = np.sum(np.arange(y_size) * y_proj) / y_sum
+        
+        # Рассчитываем RMS в пикселях для основного пучка
+        rms_x_px = np.sqrt(np.sum(x_proj * (np.arange(x_size) - centroid_x_px)**2) / x_sum)
+        rms_y_px = np.sqrt(np.sum(y_proj * (np.arange(y_size) - centroid_y_px)**2) / y_sum)
+        
+        # Этап 4: Создаем финальную эллиптическую маску на основе рассчитанных параметров
+        x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
+        
+        # Рассчитываем эллиптическое расстояние от центроида основного пучка
+        if rms_x_px > 0 and rms_y_px > 0:
+            distance_x = (x_grid - centroid_x_px) / rms_x_px
+            distance_y = (y_grid - centroid_y_px) / rms_y_px
+            elliptical_distance = np.sqrt(distance_x**2 + distance_y**2)
+            
+            # Создаем финальную маску: True для пикселей в пределах sigma_threshold
+            final_mask = elliptical_distance <= sigma_threshold
+            
+            # Применяем финальную маску к исходному изображению
+            filtered_image = processed_image.copy()
+            filtered_image[~final_mask] = 0
+            
+            # Отладочная информация
+            removed_pixels = np.sum(~final_mask)
+            total_pixels = final_mask.size
+            print("Гауссовская фильтрация: удалено {} из {} пикселей ({:.1f}%) с порогом {}σ".format(
+                removed_pixels, total_pixels, 100.0 * removed_pixels / total_pixels, sigma_threshold))
+            
+            return filtered_image
+        else:
+            # Если RMS равен нулю, возвращаем исходное изображение
+            return processed_image
     
     def calculate_projections(self, image, pixel_size_x, pixel_size_y):
         """

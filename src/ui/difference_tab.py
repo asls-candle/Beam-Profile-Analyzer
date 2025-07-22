@@ -89,7 +89,7 @@ class DifferenceTab(QWidget):
         camera_info_layout.addWidget(self.camera_pixel_size_label)
         
         # Panel with centroid and RMS information
-        beam_info_panel = QGroupBox("Beam Information (difference)")
+        beam_info_panel = QGroupBox("Beam Information (difference - filtered)")
         beam_info_panel.setMinimumWidth(140)  # Set minimum width
         beam_info_layout = QVBoxLayout(beam_info_panel)
         beam_info_layout.setSpacing(5)  # Reduce spacing between elements inside the panel

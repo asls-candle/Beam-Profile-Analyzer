@@ -16,3 +16,6 @@ DEFAULT_SPACING = 5
 # Constants for plots
 PLOT_MIN_WIDTH = 400
 PLOT_MIN_HEIGHT = 400 
+
+# Constants for image processing
+GAUSSIAN_FILTER_SIGMA_THRESHOLD = 3.0  # Порог гауссовской фильтрации в единицах σ 
