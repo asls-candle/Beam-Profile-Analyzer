@@ -520,8 +520,8 @@ class DataImporter:
         else:
             # Проверяем, что это папка с данными
             if not DataImporter.is_data_folder(folder_path):
-                print(f"Указанный путь не является папкой с данными: {folder_path}")
-                logger.error(f"Указанный путь не является папкой с данными: {folder_path}")
+                print("Указанный путь не является папкой с данными: {}".format(folder_path))
+                logger.error("Указанный путь не является папкой с данными: {}".format(folder_path))
                 return None
                 
             metadata_filepath = os.path.join(folder_path, 'metadata.json')
@@ -543,8 +543,8 @@ class DataImporter:
             logger.info("Начало импорта данных из папки: {}".format(metadata_filepath))
             
             if not os.path.exists(metadata_filepath):
-                print(f"Файл метаданных не найден: {metadata_filepath}")
-                logger.error(f"Файл метаданных не найден: {metadata_filepath}")
+                print("Файл метаданных не найден: {}".format(metadata_filepath))
+                logger.error("Файл метаданных не найден: {}".format(metadata_filepath))
                 return None
                 
             # Загружаем метаданные из JSON
@@ -563,10 +563,10 @@ class DataImporter:
                 expected_arrays = ['shot', 'background', 'difference']
             
             for array_name in expected_arrays:
-                array_path = os.path.join(folder_path, f"{array_name}.csv")
+                array_path = os.path.join(folder_path, "{}.csv".format(array_name))
                 
                 if not os.path.exists(array_path):
-                    logger.warning(f"Файл массива не найден: {array_path}")
+                    logger.warning("Файл массива не найден: {}".format(array_path))
                     continue
                     
                 # Импортируем массив из CSV (только числа, без заголовков)
@@ -603,10 +603,10 @@ class DataImporter:
                                     # Попробуем преобразовать массив к правильной форме
                                     data_array = data_array.flatten().reshape(shape)
                                 except:
-                                    logger.warning(f"Не удалось преобразовать массив {array_name} к форме {shape}")
+                                    logger.warning("Не удалось преобразовать массив {} к форме {}".format(array_name, shape))
                             
                             result_data[array_name] = data_array
-                            logger.info(f"Успешно импортирован массив: {array_name}, форма: {data_array.shape}")
+                            logger.info("Успешно импортирован массив: {}, форма: {}".format(array_name, data_array.shape))
                         except ValueError:
                             # Если не получилось, пробуем по пробелам
                             try:
@@ -618,14 +618,14 @@ class DataImporter:
                                     try:
                                         data_array = data_array.flatten().reshape(shape)
                                     except:
-                                        logger.warning(f"Не удалось преобразовать массив {array_name} к форме {shape}")
+                                        logger.warning("Не удалось преобразовать массив {} к форме {}".format(array_name, shape))
                                 
                                 result_data[array_name] = data_array
-                                logger.info(f"Успешно импортирован массив: {array_name}, форма: {data_array.shape}")
+                                logger.info("Успешно импортирован массив: {}, форма: {}".format(array_name, data_array.shape))
                             except Exception as e:
-                                logger.error(f"Не удалось разобрать данные в файле {array_path}: {e}")
+                                logger.error("Не удалось разобрать данные в файле {}: {}".format(array_path, e))
                 except Exception as e:
-                    logger.error(f"Ошибка при чтении файла {array_path}: {e}")
+                    logger.error("Ошибка при чтении файла {}: {}".format(array_path, e))
             
             # Проверяем наличие необходимых массивов
             if 'shot' not in result_data or 'background' not in result_data:
@@ -634,8 +634,8 @@ class DataImporter:
                 
             # Проверяем совпадение размеров массивов
             if result_data['shot'].shape != result_data['background'].shape:
-                logger.error(f"Размеры массивов shot и background не совпадают: "
-                           f"{result_data['shot'].shape} vs {result_data['background'].shape}")
+                logger.error("Размеры массивов shot и background не совпадают: "
+                           "{} vs {}".format(result_data['shot'].shape, result_data['background'].shape))
                 return None
                 
             # Добавляем разность, если её нет
@@ -655,12 +655,12 @@ class DataImporter:
             if 'filepath' not in result_data:
                 result_data['filepath'] = folder_path
             
-            logger.info(f"Успешно импортированы данные из папки: {folder_path}")
+            logger.info("Успешно импортированы данные из папки: {}".format(folder_path))
             return result_data
             
         except Exception as e:
-            print(f"Ошибка при импорте данных из JSON и CSV файлов: {e}")
-            logger.error(f"Ошибка при импорте данных из JSON и CSV файлов: {e}", exc_info=True)
+            print("Ошибка при импорте данных из JSON и CSV файлов: {}".format(e))
+            logger.error("Ошибка при импорте данных из JSON и CSV файлов: {}".format(e), exc_info=True)
             return None
             
     @staticmethod
@@ -681,23 +681,23 @@ class DataImporter:
         
         # Проверяем, является ли путь папкой с данными
         if os.path.isdir(filepath) and DataImporter.is_data_folder(filepath):
-            print(f"Импорт данных из папки: {filepath}")
-            logger.info(f"Импорт данных из папки: {filepath}")
+            print("Импорт данных из папки: {}".format(filepath))
+            logger.info("Импорт данных из папки: {}".format(filepath))
             return DataImporter.import_folder(filepath)
             
         # Проверяем, указывает ли путь на metadata.json в папке с данными
         if os.path.isfile(filepath) and os.path.basename(filepath) == "metadata.json":
-            print(f"Импорт данных из метафайла: {filepath}")
-            logger.info(f"Импорт данных из метафайла: {filepath}")
+            print("Импорт данных из метафайла: {}".format(filepath))
+            logger.info("Импорт данных из метафайла: {}".format(filepath))
             return DataImporter.import_multifile_csv(filepath)
             
         # Если это MAT-файл
         file_ext = os.path.splitext(filepath)[1].lower()
         if file_ext == '.mat':
-            print(f"Импорт данных из MAT файла: {filepath}")
-            logger.info(f"Импорт данных из MAT файла: {filepath}")
+            print("Импорт данных из MAT файла: {}".format(filepath))
+            logger.info("Импорт данных из MAT файла: {}".format(filepath))
             return DataImporter.import_mat(filepath)
         else:
-            print(f"Неподдерживаемый формат файла: {filepath}")
-            logger.error(f"Неподдерживаемый формат файла: {filepath}")
+            print("Неподдерживаемый формат файла: {}".format(filepath))
+            logger.error("Неподдерживаемый формат файла: {}".format(filepath))
             return None

@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
         result = DataExporter.export_data(filepath, export_data, export_format, self.plot_manager)
         
         if result:
-            QMessageBox.information(self, "Information", f"Data successfully exported to {result}")
+            QMessageBox.information(self, "Information", "Data successfully exported to {}".format(result))
         else:
             QMessageBox.warning(self, "Warning", "Error exporting data")
             
