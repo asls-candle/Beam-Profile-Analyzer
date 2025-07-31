@@ -104,17 +104,17 @@ class DataImporter:
             if background is not None:
                 # Проверяем совпадение размеров
                 if shot.shape == background.shape:
-                    # Сначала вычитаем необработанный фон, затем нормализуем
+                    # Сначала вычитаем необработанный фон, затем нормализуем с использованием shot как референса
                     raw_difference = shot - background
                     raw_difference[raw_difference < 0] = 0
-                    difference = ImageNormalizer.normalize(raw_difference)
+                    difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
                 else:
                     print("Размеры снимка и фона не совпадают")
                     difference = None
             
-            # Нормализуем снимок и фон для возврата
+            # Нормализуем снимок и фон для возврата, используя shot как референс для всех
             normalized_shot = ImageNormalizer.normalize(shot)
-            normalized_background = ImageNormalizer.normalize(background) if background is not None else None
+            normalized_background = ImageNormalizer.normalize(background, reference_image=shot) if background is not None else None
             
             # Формируем результирующий словарь
             logger.debug("Формирование результирующего словаря с данными")
@@ -303,17 +303,17 @@ class DataImporter:
                 if background is not None:
                     # Проверяем совпадение размеров
                     if shot.shape == background.shape:
-                        # Сначала вычитаем необработанный фон, затем нормализуем
+                        # Сначала вычитаем необработанный фон, затем нормализуем с использованием shot как референса
                         raw_difference = shot - background
                         raw_difference[raw_difference < 0] = 0
-                        difference = ImageNormalizer.normalize(raw_difference)
+                        difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
                     else:
                         print("Размеры снимка и фона не совпадают")
                         difference = None
                 
-                # Нормализуем снимок и фон для возврата
+                # Нормализуем снимок и фон для возврата, используя shot как референс для всех
                 normalized_shot = ImageNormalizer.normalize(shot)
-                normalized_background = ImageNormalizer.normalize(background) if background is not None else None
+                normalized_background = ImageNormalizer.normalize(background, reference_image=shot) if background is not None else None
                 
                 # Добавляем нормализованные данные и разницу
                 result_data['shot'] = normalized_shot

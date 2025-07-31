@@ -268,7 +268,9 @@ class ImageReader:
         
         with self.background_lock:
             self.raw_background = raw_bg
-            self.background = ImageNormalizer.normalize(raw_bg)
+            # Используем текущий кадр как референс для нормализации фона, если он есть
+            reference_frame = self.raw_current_frame if self.raw_current_frame is not None else None
+            self.background = ImageNormalizer.normalize(raw_bg, reference_image=reference_frame)
             print("pydc1394: Фон успешно создан, размер: {}".format(self.background.shape))
             
         # Вычисляем разницу с текущим кадром
@@ -281,8 +283,9 @@ class ImageReader:
         Вычисляет разницу между текущим кадром и фоном.
         
         Сначала выполняет вычитание необработанного фонового изображения из 
-        необработанного текущего кадра, затем нормализует результат.
-        Все отрицательные значения заменяются на ноль.
+        необработанного текущего кадра, затем нормализует результат, используя
+        текущий кадр как референсное изображение для сохранения правильного
+        масштаба интенсивности. Все отрицательные значения заменяются на ноль.
         Результат сохраняется в атрибуте self.difference.
         
         Примечание:
@@ -306,6 +309,6 @@ class ImageReader:
         # Обрезаем отрицательные значения
         raw_diff[raw_diff < 0] = 0
         
-        # Нормализуем результат
-        self.difference = ImageNormalizer.normalize(raw_diff)
+        # Нормализуем результат, используя текущий кадр как референс
+        self.difference = ImageNormalizer.normalize(raw_diff, reference_image=self.raw_current_frame)
         return True
