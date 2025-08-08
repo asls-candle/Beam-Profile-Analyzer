@@ -4,6 +4,7 @@ import re
 import scipy.io as sio
 import pandas as pd
 import json
+from scipy.ndimage import gaussian_filter
 
 import logging
 logger = logging.getLogger('data')
@@ -107,7 +108,9 @@ class DataImporter:
                     # Сначала вычитаем необработанный фон, затем нормализуем с использованием shot как референса
                     raw_difference = shot - background
                     raw_difference[raw_difference < 0] = 0
-                    difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
+                    # Применяем гауссову фильтрацию для сглаживания (сигма 1-2 пикселя)
+                    raw_difference_filtered = gaussian_filter(raw_difference, sigma=1.5)
+                    difference = ImageNormalizer.normalize(raw_difference_filtered, reference_image=shot)
                 else:
                     print("Размеры снимка и фона не совпадают")
                     difference = None
@@ -306,7 +309,9 @@ class DataImporter:
                         # Сначала вычитаем необработанный фон, затем нормализуем с использованием shot как референса
                         raw_difference = shot - background
                         raw_difference[raw_difference < 0] = 0
-                        difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
+                        # Применяем гауссову фильтрацию для сглаживания (сигма 1-2 пикселя)
+                        raw_difference_filtered = gaussian_filter(raw_difference, sigma=1.5)
+                        difference = ImageNormalizer.normalize(raw_difference_filtered, reference_image=shot)
                     else:
                         print("Размеры снимка и фона не совпадают")
                         difference = None
@@ -642,8 +647,10 @@ class DataImporter:
             if 'difference' not in result_data:
                 difference = result_data['shot'] - result_data['background']
                 difference[difference < 0] = 0
+                # Применяем гауссову фильтрацию для сглаживания (сигма 1-2 пикселя)
+                difference = gaussian_filter(difference, sigma=1.5)
                 result_data['difference'] = difference
-                logger.info("Автоматически рассчитана разность shot - background")
+                logger.info("Автоматически рассчитана разность shot - background с гауссовой фильтрацией")
             
             # Добавляем дополнительные поля, если их нет
             if 'current_frame' not in result_data:

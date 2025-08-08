@@ -1,6 +1,7 @@
 import numpy as np
 from threading import Thread, Event, Lock
 import time
+from scipy.ndimage import gaussian_filter
 
 from src.analysis.normalizer import ImageNormalizer
 
@@ -283,9 +284,10 @@ class ImageReader:
         Вычисляет разницу между текущим кадром и фоном.
         
         Сначала выполняет вычитание необработанного фонового изображения из 
-        необработанного текущего кадра, затем нормализует результат, используя
-        текущий кадр как референсное изображение для сохранения правильного
-        масштаба интенсивности. Все отрицательные значения заменяются на ноль.
+        необработанного текущего кадра, затем применяет гауссову фильтрацию
+        для сглаживания, нормализует результат, используя текущий кадр как 
+        референсное изображение для сохранения правильного масштаба интенсивности. 
+        Все отрицательные значения заменяются на ноль.
         Результат сохраняется в атрибуте self.difference.
         
         Примечание:
@@ -309,6 +311,9 @@ class ImageReader:
         # Обрезаем отрицательные значения
         raw_diff[raw_diff < 0] = 0
         
+        # Применяем гауссову фильтрацию для сглаживания (сигма 1-2 пикселя)
+        raw_diff_filtered = gaussian_filter(raw_diff, sigma=1.5)
+        
         # Нормализуем результат, используя текущий кадр как референс
-        self.difference = ImageNormalizer.normalize(raw_diff, reference_image=self.raw_current_frame)
+        self.difference = ImageNormalizer.normalize(raw_diff_filtered, reference_image=self.raw_current_frame)
         return True
