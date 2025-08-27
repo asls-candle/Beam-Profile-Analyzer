@@ -9,6 +9,7 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
 from src.ui.constants import TOP_PANEL_HEIGHT
+from src.analysis.filters import apply_median_filter
 
 class DifferenceTab(QWidget):
     """
@@ -199,8 +200,9 @@ class DifferenceTab(QWidget):
         # Area for colorbar
         cax = fig.add_subplot(gs[0, 2])
         
-        # Get image data
+        # Get image data and apply median filtering for visualization
         img_data = data["difference"].data
+        img_data = apply_median_filter(img_data, kernel_size=3)
         
         # Calculate coordinates in millimeters (centered relative to zero)
         height, width = img_data.shape

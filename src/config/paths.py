@@ -35,7 +35,7 @@ def get_folder_path(folders: Tuple[str, ...]) -> str:
     return os.path.join(BASE_DIR, *folders)
 
 
-def get_file_log_path(module_name: str) -> str:
+def get_file_log_path(module_name):
     """
     Возвращает путь к файлу лога для конкретного модуля.
     
