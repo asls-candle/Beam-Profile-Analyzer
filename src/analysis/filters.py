@@ -40,5 +40,3 @@ def apply_median_filter(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
         except Exception:
             pass
     return filtered
-
-
