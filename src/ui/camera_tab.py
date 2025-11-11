@@ -438,8 +438,8 @@ class CameraTab(QWidget):
 
         # Calculate coordinates in millimeters (centered relative to zero)
         height, width = img_data.shape
-        x_mm = (np.arange(width) - width / 2) * pixel_size_x
-        y_mm = (np.arange(height) - height / 2) * pixel_size_y
+        x_mm = (np.arange(width) - (width - 1) / 2) * pixel_size_x
+        y_mm = (np.arange(height) - (height - 1) / 2) * pixel_size_y
 
         # Heatmap
         im = ax_heatmap.imshow(
