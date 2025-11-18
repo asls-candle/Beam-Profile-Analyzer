@@ -41,7 +41,7 @@ class DataImporter:
                 print("Файл {} не содержит данных".format(filepath))
                 logger.error("Файл {} не содержит данных".format(filepath))
                 return None
-
+            logger.debug("Variavle names: {}".format(shot_data.keys()))
             # Получаем имя переменной с данными (обычно первая переменная, не начинающаяся с "__")
             logger.debug("Поиск переменных с данными в файле")
             shot_var_names = [key for key in shot_data.keys() if not key.startswith("__")]
@@ -364,64 +364,68 @@ class DataImporter:
             filename = os.path.basename(filepath)
             base_name, ext = os.path.splitext(filename)
 
-            logger.debug("Исходный файл: директория={}, имя={}, базовое имя={}, расширение={}".format(directory, filename, base_name, ext))
+            logger.debug("Исходный файл: директория={}, имя={}, базовое имя={}, расширение={}".format(
+                directory, filename, base_name, ext))
 
             # Шаблоны для поиска фонового файла
             logger.debug("Применение шаблонов для поиска фонового файла")
-            # Для случая 039_1_14_56_41.mat -> 039_1_bg_14_56_41.mat
-            patterns = [
-                # Новый паттерн 1: Явно ищем bg после первого числа (для формата 039_1_bg_14_56_41.mat)
-                lambda f: re.sub(r'(\d+_\d+)_', r'\1_bg_', f),
 
-                # Новый паттерн 2: Вставка "_bg" перед временем (для других форматов)
-                lambda f: re.sub(r'_(\d{2}_\d{2}_\d{2})', r'_bg_\1', f),
+            # Список возможных имен файлов с фоном (в порядке приоритета)
+            possible_bg_names = [
+                # 1. Самый простой и распространенный: base_name + "_bg" + ext
+                # Например: Q_0.03A_S_8.4A_E_3.6MeV_Q_220PC_1.mat -> Q_0.03A_S_8.4A_E_3.6MeV_Q_220PC_1_bg.mat
+                base_name + "_bg" + ext,
 
-                # Старые паттерны оставляем как запасные варианты
-                lambda f: re.sub(r'_(\d+)_', r'_\1_bg_', f),  # Замена "_X_" на "_X_bg_"
-                lambda f: f.replace(ext, "_bg{}".format(ext)),  # Замена расширения на "_bg.mat"
+                # 2. Для формата 039_1_14_56_41.mat -> 039_1_bg_14_56_41.mat
+                re.sub(r'(\d+_\d+)_(\d{2}_\d{2}_\d{2})', r'\1_bg_\2', filename),
 
-                # Новый общий паттерн: вставка "bg" перед расширением
-                lambda f: base_name + "_bg" + ext,
+                # 3. Вставка "_bg" перед временем
+                re.sub(r'_(\d{2}_\d{2}_\d{2})', r'_bg_\1', filename),
 
-                # Самый простой вариант - просто добавление "bg" после базового имени
-                lambda f: os.path.join(directory, base_name + "_bg" + ext)
+                # 4. Замена "_X_" на "_X_bg_"
+                re.sub(r'_(\d+)_', r'_\1_bg_', filename),
+
+                # 5. Замена расширения на "_bg.ext"
+                filename.replace(ext, "_bg{}".format(ext)),
             ]
 
-            # Прямая проверка наиболее вероятных имен файлов с фоном
-            logger.debug("Проверка наиболее вероятных имен файлов с фоном:")
+            # Проверяем каждое возможное имя файла
+            for i, bg_filename in enumerate(possible_bg_names, 1):
+                # Пропускаем если это то же имя, что и исходный файл
+                if bg_filename == filename:
+                    continue
 
-            # Проверяем возможные имена файлов
-            for i, pattern in enumerate(patterns):
-                try:
-                    # Применяем паттерн и получаем имя потенциального файла с фоном
-                    if callable(pattern):
-                        bg_filename = pattern(filename)
-                    else:
-                        bg_filename = pattern  # Если это готовый путь
+                bg_filepath = os.path.join(directory, bg_filename)
+                logger.debug("Проверка варианта {}: {}".format(i, bg_filepath))
 
-                    # Если результат - полный путь, используем его
-                    if os.path.isabs(bg_filename):
-                        bg_filepath = bg_filename
-                    else:
-                        bg_filepath = os.path.join(directory, bg_filename)
-
-                    logger.debug("Проверка шаблона {}: {}".format(i+1, bg_filepath))
-
-                    # Если файл существует, возвращаем его путь
-                    if os.path.exists(bg_filepath) and os.path.isfile(bg_filepath):
-                        logger.info("Найден файл с фоном: {}".format(bg_filepath))
-                        return bg_filepath
-                except Exception as e:
-                    logger.debug("Ошибка при применении шаблона {}: {}".format(i+1, e))
+                # Если файл существует, возвращаем его путь
+                if os.path.exists(bg_filepath) and os.path.isfile(bg_filepath):
+                    logger.info("Найден файл с фоном: {}".format(bg_filepath))
+                    return bg_filepath
 
             # Ищем в директории файлы с похожими именами
             logger.debug("Поиск файлов с 'bg' в названии в той же директории:")
-            for file in os.listdir(directory):
-                if file.endswith(ext) and "bg" in file.lower() and base_name.split('_')[0] in file:
-                    bg_filepath = os.path.join(directory, file)
-                    logger.debug("Найден возможный файл с фоном: {}".format(bg_filepath))
-                    logger.info("Найден файл с фоном: {}".format(bg_filepath))
-                    return bg_filepath
+            try:
+                for file in os.listdir(directory):
+                    if file == filename:  # Пропускаем сам исходный файл
+                        continue
+
+                    if file.endswith(ext) and "bg" in file.lower():
+                        # Проверяем, что это похожий файл (имеет общую часть имени)
+                        # Берем первую часть имени до первого "_" или весь base_name
+                        file_base = os.path.splitext(file)[0]
+
+                        # Простая эвристика: если в имени bg-файла есть существенная часть
+                        # исходного имени, считаем его подходящим
+                        common_part = base_name.split('_')[0] if '_' in base_name else base_name[:10]
+
+                        if common_part and common_part in file_base:
+                            bg_filepath = os.path.join(directory, file)
+                            logger.debug("Найден возможный файл с фоном: {}".format(bg_filepath))
+                            logger.info("Найден файл с фоном: {}".format(bg_filepath))
+                            return bg_filepath
+            except Exception as e:
+                logger.debug("Ошибка при поиске в директории: {}".format(e))
 
             # Печатаем сообщение только в debug и warning, но не в консоль,
             # чтобы избежать дублирования в методе import_mat

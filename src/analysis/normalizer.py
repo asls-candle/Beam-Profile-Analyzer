@@ -90,5 +90,6 @@ class ImageNormalizer:
 
         # Замена отрицательных значений на ноль
         avg_background[avg_background < 0] = 0
-
+        logger.debug("Averaged background:")
+        logger.debug(avg_background)
         return avg_background

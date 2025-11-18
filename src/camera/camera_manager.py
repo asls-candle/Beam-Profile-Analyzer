@@ -180,8 +180,8 @@ class CameraManager:
                                 height = camera.height
                                 self.CAMERAS[camera_name] = {
                                     "resolution": (width, height),
-                                    "pixel_size_x": 0.01, # приблизительно, нужно уточнить для реальной камеры
-                                    "pixel_size_y": 0.01, # приблизительно, нужно уточнить для реальной камеры
+                                    "pixel_size_x": 0.01,  # приблизительно, нужно уточнить для реальной камеры
+                                    "pixel_size_y": 0.01,  # приблизительно, нужно уточнить для реальной камеры
                                     "linux_name": str(cam)
                                 }
                                 logger.info("Добавлена новая камера в конфигурацию: %s, разрешение %dx%d",
