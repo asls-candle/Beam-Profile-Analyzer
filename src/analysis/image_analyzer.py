@@ -103,6 +103,11 @@ class ImageAnalyzer:
         """
         Рассчитывает координаты центроида изображения в центрированной системе координат
 
+        Метод реализован аналогично MATLAB версии (AVG_STD.m):
+        - Используется система координат, центрированная относительно 0
+        - Для размера N координаты от -(N-1)/2 до N/2
+        - Центроид вычисляется как взвешенное среднее: sum(coords * projection) / sum(projection)
+
         Args:
             image: Двумерный массив значений светимости
             pixel_size_x: Размер пикселя по оси X (мм)
@@ -117,28 +122,44 @@ class ImageAnalyzer:
         # Применяем ROI если задан
         processed_image = self.apply_roi(image)
 
-        # Создаем координатную сетку (в пикселях)
+        # Получаем размеры изображения
         y_size, x_size = processed_image.shape
-        x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
 
-        # Вычисляем суммы интенсивности по осям
+        # Создаем координаты, центрированные относительно 0 (как в MATLAB)
+        # xdata = (-(x_size-1)/2):(x_size/2) с шагом 1
+        x_coords = np.arange(x_size) - (x_size - 1) / 2
+        y_coords = np.arange(y_size) - (y_size - 1) / 2
+
+        # Вычисляем проекции (суммы интенсивности по осям)
         x_proj = np.sum(processed_image, axis=0)
         y_proj = np.sum(processed_image, axis=1)
 
+        # Нормализуем проекции (как в MATLAB: sxn = sx/max(sx))
+        if np.max(x_proj) > 0:
+            x_proj_norm = x_proj / np.max(x_proj)
+        else:
+            x_proj_norm = x_proj
+
+        if np.max(y_proj) > 0:
+            y_proj_norm = y_proj / np.max(y_proj)
+        else:
+            y_proj_norm = y_proj
+
         # Избегаем деления на ноль
-        x_sum = np.sum(x_proj)
-        y_sum = np.sum(y_proj)
+        x_sum = np.sum(x_proj_norm)
+        y_sum = np.sum(y_proj_norm)
 
         if x_sum == 0 or y_sum == 0:
             return 0, 0
 
         # Вычисляем взвешенное среднее положение (центроид) в пикселях
-        centroid_x_px = np.sum(np.arange(x_size) * x_proj) / x_sum
-        centroid_y_px = np.sum(np.arange(y_size) * y_proj) / y_sum
+        # averagex = sum(xdata * sxn) / sum(sxn)
+        centroid_x_px = np.sum(x_coords * x_proj_norm) / x_sum
+        centroid_y_px = np.sum(y_coords * y_proj_norm) / y_sum
 
-        # Преобразование в милиметры и центрирование относительно середины изображения
-        centroid_x = (centroid_x_px - x_size / 2) * pixel_size_x
-        centroid_y = (centroid_y_px - y_size / 2) * pixel_size_y
+        # Преобразование в милиметры (координаты уже центрированные)
+        centroid_x = centroid_x_px * pixel_size_x
+        centroid_y = centroid_y_px * pixel_size_y
 
         return centroid_x, centroid_y
 
@@ -146,6 +167,10 @@ class ImageAnalyzer:
         """
         Рассчитывает RMS (Root Mean Square) отклонения пучка по осям X и Y
         в центрированной системе координат
+
+        Метод реализован аналогично MATLAB версии (AVG_STD.m):
+        - Используется система координат, центрированная относительно 0
+        - RMS вычисляется как: sqrt(sum(projection * (coords - centroid)^2) / sum(projection))
 
         Args:
             image: Двумерный массив значений светимости
@@ -161,27 +186,43 @@ class ImageAnalyzer:
         # Применяем ROI если задан
         processed_image = self.apply_roi(image)
 
-        # Получаем центроид в пикселях относительно начала координат
+        # Получаем размеры изображения
         y_size, x_size = processed_image.shape
 
-        # Вычисляем суммы интенсивности по осям
+        # Создаем координаты, центрированные относительно 0 (как в MATLAB)
+        x_coords = np.arange(x_size) - (x_size - 1) / 2
+        y_coords = np.arange(y_size) - (y_size - 1) / 2
+
+        # Вычисляем проекции (суммы интенсивности по осям)
         x_proj = np.sum(processed_image, axis=0)
         y_proj = np.sum(processed_image, axis=1)
 
+        # Нормализуем проекции (как в MATLAB: sxn = sx/max(sx))
+        if np.max(x_proj) > 0:
+            x_proj_norm = x_proj / np.max(x_proj)
+        else:
+            x_proj_norm = x_proj
+
+        if np.max(y_proj) > 0:
+            y_proj_norm = y_proj / np.max(y_proj)
+        else:
+            y_proj_norm = y_proj
+
         # Избегаем деления на ноль
-        x_sum = np.sum(x_proj)
-        y_sum = np.sum(y_proj)
+        x_sum = np.sum(x_proj_norm)
+        y_sum = np.sum(y_proj_norm)
 
         if x_sum == 0 or y_sum == 0:
             return 0, 0
 
         # Вычисляем взвешенное среднее положение (центроид) в пикселях
-        centroid_x_px = np.sum(np.arange(x_size) * x_proj) / x_sum
-        centroid_y_px = np.sum(np.arange(y_size) * y_proj) / y_sum
+        centroid_x_px = np.sum(x_coords * x_proj_norm) / x_sum
+        centroid_y_px = np.sum(y_coords * y_proj_norm) / y_sum
 
         # Вычисляем RMS
-        rms_x_px = np.sqrt(np.sum(x_proj * (np.arange(x_size) - centroid_x_px)**2) / x_sum)
-        rms_y_px = np.sqrt(np.sum(y_proj * (np.arange(y_size) - centroid_y_px)**2) / y_sum)
+        # sigmax = sqrt(sum(sxn * (xdata - averagex)^2) / sum(sxn))
+        rms_x_px = np.sqrt(np.sum(x_proj_norm * (x_coords - centroid_x_px)**2) / x_sum)
+        rms_y_px = np.sqrt(np.sum(y_proj_norm * (y_coords - centroid_y_px)**2) / y_sum)
 
         # Преобразование в милиметры
         rms_x = rms_x_px * pixel_size_x
