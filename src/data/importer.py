@@ -107,10 +107,10 @@ class DataImporter:
             if background is not None:
                 # Проверяем совпадение размеров
                 if shot.shape == background.shape:
-                    # Сначала вычитаем необработанный фон, затем нормализуем с использованием shot как референса
+                    # Сначала вычитаем необработанный фон, затем нормализуем без референса
                     raw_difference = shot - background
                     raw_difference[raw_difference < 0] = 0
-                    difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
+                    difference = ImageNormalizer.normalize(raw_difference)
                     # Применяем медианный фильтр к разностному изображению
                     # difference = apply_median_filter(difference, kernel_size=3)
                 else:
@@ -308,10 +308,10 @@ class DataImporter:
                 if background is not None:
                     # Проверяем совпадение размеров
                     if shot.shape == background.shape:
-                        # Сначала вычитаем необработанный фон, затем нормализуем с использованием shot как референса
+                        # Сначала вычитаем необработанный фон, затем нормализуем без референса
                         raw_difference = shot - background
                         raw_difference[raw_difference < 0] = 0
-                        difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
+                        difference = ImageNormalizer.normalize(raw_difference)
                         # Применяем медианный фильтр к разностному изображению
                         # difference = apply_median_filter(difference, kernel_size=3)
                     else:
@@ -608,9 +608,11 @@ class DataImporter:
         raw_difference[raw_difference < 0] = 0
 
         # Нормализуем данные
+        # shot и background нормализуются относительно raw_shot (чтобы иметь общую шкалу)
         shot = ImageNormalizer.normalize(raw_shot)
         background = ImageNormalizer.normalize(raw_background, reference_image=raw_shot)
-        difference = ImageNormalizer.normalize(raw_difference, reference_image=raw_shot)
+        # difference нормализуется сам по себе (без референса), так как это уже вычтенные данные
+        difference = ImageNormalizer.normalize(raw_difference)
 
         return {
             'shot': shot,
