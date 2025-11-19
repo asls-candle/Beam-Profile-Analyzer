@@ -103,27 +103,26 @@ class DataImporter:
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
             logger.info("Определена камера: {}".format(camera_info['name']))
 
-            # Максимальное значение для 16-битной камеры
+            # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
             bit_depth_max = 65535.0
 
-            # Вычитаем фон если он есть
+            # Нормализуем shot и background на максимум разрядности (как im2double)
+            normalized_shot = shot / bit_depth_max
+            normalized_background = background / bit_depth_max if background is not None else None
+
+            # Вычитаем фон если он есть (после нормализации, как в MATLAB)
             if background is not None:
                 # Проверяем совпадение размеров
                 if shot.shape == background.shape:
-                    # Сначала вычитаем необработанный фон
-                    raw_difference = shot - background
-                    raw_difference[raw_difference < 0] = 0
-                    # Нормализуем difference относительно максимума разрядности
-                    difference = raw_difference / bit_depth_max
+                    # Вычитаем нормализованный фон из нормализованного shot
+                    difference = normalized_shot - normalized_background
+                    difference[difference < 0] = 0
+                    # БЕЗ дополнительной нормализации - как в MATLAB!
                     # Применяем медианный фильтр к разностному изображению
                     # difference = apply_median_filter(difference, kernel_size=3)
                 else:
                     print("Размеры снимка и фона не совпадают")
                     difference = None
-
-            # Нормализуем снимок и фон от 0 до максимального значения разрядности
-            normalized_shot = shot / bit_depth_max
-            normalized_background = background / bit_depth_max if background is not None else None
 
             # Формируем результирующий словарь
             logger.debug("Формирование результирующего словаря с данными")
@@ -308,27 +307,26 @@ class DataImporter:
                     camera_info = DataImporter._determine_camera_by_shape(shot.shape)
                     result_data.update(camera_info)
 
-                # Максимальное значение для 16-битной камеры
+                # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
                 bit_depth_max = 65535.0
 
-                # Вычитаем фон если он есть
+                # Нормализуем shot и background на максимум разрядности (как im2double)
+                normalized_shot = shot / bit_depth_max
+                normalized_background = background / bit_depth_max if background is not None else None
+
+                # Вычитаем фон если он есть (после нормализации, как в MATLAB)
                 if background is not None:
                     # Проверяем совпадение размеров
                     if shot.shape == background.shape:
-                        # Сначала вычитаем необработанный фон
-                        raw_difference = shot - background
-                        raw_difference[raw_difference < 0] = 0
-                        # Нормализуем difference относительно максимума разрядности
-                        difference = raw_difference / bit_depth_max
+                        # Вычитаем нормализованный фон из нормализованного shot
+                        difference = normalized_shot - normalized_background
+                        difference[difference < 0] = 0
+                        # БЕЗ дополнительной нормализации - как в MATLAB!
                         # Применяем медианный фильтр к разностному изображению
                         # difference = apply_median_filter(difference, kernel_size=3)
                     else:
                         print("Размеры снимка и фона не совпадают")
                         difference = None
-
-                # Нормализуем снимок и фон от 0 до максимального значения разрядности
-                normalized_shot = shot / bit_depth_max
-                normalized_background = background / bit_depth_max if background is not None else None
 
                 # Добавляем нормализованные данные и разницу
                 result_data['shot'] = normalized_shot
@@ -603,6 +601,7 @@ class DataImporter:
     def _compute_processed_data(raw_shot, raw_background):
         """
         Вычисляет обработанные данные из сырых массивов
+        Реализация аналогична MATLAB im2double: нормализация на 65535
 
         Args:
             raw_shot: Сырой массив снимка
@@ -611,20 +610,17 @@ class DataImporter:
         Returns:
             dict: Словарь с обработанными данными (shot, background, difference)
         """
-        # Вычисляем разность
-        raw_difference = raw_shot - raw_background
-        raw_difference[raw_difference < 0] = 0
-
-        # Максимальное значение для 16-битной камеры
+        # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
         bit_depth_max = 65535.0
 
-        # Нормализуем данные от 0 до максимального значения разрядности
-        # Это сохраняет абсолютные значения светимости: 0 света = 0, 65535 = 1
+        # Нормализуем shot и background на максимум разрядности (как im2double)
         shot = raw_shot / bit_depth_max
         background = raw_background / bit_depth_max
 
-        # difference нормализуется относительно максимума разрядности
-        difference = raw_difference / bit_depth_max
+        # Вычитаем нормализованный фон из нормализованного shot (как в MATLAB)
+        difference = shot - background
+        difference[difference < 0] = 0
+        # БЕЗ дополнительной нормализации - как в MATLAB!
 
         return {
             'shot': shot,
