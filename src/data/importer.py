@@ -701,9 +701,10 @@ class DataImporter:
                 # Если нет difference, но есть shot и background, вычисляем
                 if result_data['difference'] is None:
                     logger.info("Файл difference.csv не найден, вычисляем разность")
+                    # shot и background уже нормализованы (из CSV), просто вычитаем
                     raw_diff = result_data['shot'] - result_data['background']
                     raw_diff[raw_diff < 0] = 0
-                    result_data['difference'] = ImageNormalizer.normalize(raw_diff, reference_image=result_data['shot'])
+                    result_data['difference'] = raw_diff  # БЕЗ повторной нормализации!
 
             elif has_raw_data:
                 # Вариант 2: Есть только сырые данные, вычисляем обработанные
