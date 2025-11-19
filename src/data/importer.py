@@ -103,11 +103,12 @@ class DataImporter:
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
             logger.info("Определена камера: {}".format(camera_info['name']))
 
-            # Нормализуем shot и background используя ImageNormalizer (как im2double)
-            normalized_shot = ImageNormalizer.normalize(shot)
-            normalized_background = ImageNormalizer.normalize(background) if background is not None else None
+            # MAT файлы уже содержат нормализованные данные (из MATLAB im2double)
+            # НЕ нормализуем повторно!
+            normalized_shot = shot
+            normalized_background = background
 
-            # Вычитаем фон если он есть (после нормализации, как в MATLAB)
+            # Вычитаем фон если он есть
             if background is not None:
                 # Проверяем совпадение размеров
                 if shot.shape == background.shape:
