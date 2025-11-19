@@ -103,8 +103,8 @@ class DataImporter:
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
             logger.info("Определена камера: {}".format(camera_info['name']))
 
-            # Находим максимальное значение для нормализации от 0 до max
-            max_val = np.max(shot)
+            # Максимальное значение для 16-битной камеры
+            bit_depth_max = 65535.0
 
             # Вычитаем фон если он есть
             if background is not None:
@@ -113,18 +113,17 @@ class DataImporter:
                     # Сначала вычитаем необработанный фон
                     raw_difference = shot - background
                     raw_difference[raw_difference < 0] = 0
-                    # Нормализуем difference относительно своего максимума
-                    max_diff = np.max(raw_difference)
-                    difference = raw_difference / max_diff if max_diff > 0 else raw_difference
+                    # Нормализуем difference относительно максимума разрядности
+                    difference = raw_difference / bit_depth_max
                     # Применяем медианный фильтр к разностному изображению
                     # difference = apply_median_filter(difference, kernel_size=3)
                 else:
                     print("Размеры снимка и фона не совпадают")
                     difference = None
 
-            # Нормализуем снимок и фон от 0 до максимального значения в shot
-            normalized_shot = shot / max_val if max_val > 0 else shot
-            normalized_background = background / max_val if (background is not None and max_val > 0) else background
+            # Нормализуем снимок и фон от 0 до максимального значения разрядности
+            normalized_shot = shot / bit_depth_max
+            normalized_background = background / bit_depth_max if background is not None else None
 
             # Формируем результирующий словарь
             logger.debug("Формирование результирующего словаря с данными")
@@ -309,8 +308,8 @@ class DataImporter:
                     camera_info = DataImporter._determine_camera_by_shape(shot.shape)
                     result_data.update(camera_info)
 
-                # Находим максимальное значение для нормализации от 0 до max
-                max_val = np.max(shot)
+                # Максимальное значение для 16-битной камеры
+                bit_depth_max = 65535.0
 
                 # Вычитаем фон если он есть
                 if background is not None:
@@ -319,18 +318,17 @@ class DataImporter:
                         # Сначала вычитаем необработанный фон
                         raw_difference = shot - background
                         raw_difference[raw_difference < 0] = 0
-                        # Нормализуем difference относительно своего максимума
-                        max_diff = np.max(raw_difference)
-                        difference = raw_difference / max_diff if max_diff > 0 else raw_difference
+                        # Нормализуем difference относительно максимума разрядности
+                        difference = raw_difference / bit_depth_max
                         # Применяем медианный фильтр к разностному изображению
                         # difference = apply_median_filter(difference, kernel_size=3)
                     else:
                         print("Размеры снимка и фона не совпадают")
                         difference = None
 
-                # Нормализуем снимок и фон от 0 до максимального значения в shot
-                normalized_shot = shot / max_val if max_val > 0 else shot
-                normalized_background = background / max_val if (background is not None and max_val > 0) else background
+                # Нормализуем снимок и фон от 0 до максимального значения разрядности
+                normalized_shot = shot / bit_depth_max
+                normalized_background = background / bit_depth_max if background is not None else None
 
                 # Добавляем нормализованные данные и разницу
                 result_data['shot'] = normalized_shot
@@ -617,17 +615,16 @@ class DataImporter:
         raw_difference = raw_shot - raw_background
         raw_difference[raw_difference < 0] = 0
 
-        # Находим максимальное значение для нормализации от 0 до max
-        max_val = np.max(raw_shot)
+        # Максимальное значение для 16-битной камеры
+        bit_depth_max = 65535.0
 
-        # Нормализуем данные от 0 до максимального значения в shot
-        # Это сохраняет абсолютные значения светимости: 0 света = 0, max света = 1
-        shot = raw_shot / max_val if max_val > 0 else raw_shot
-        background = raw_background / max_val if max_val > 0 else raw_background
+        # Нормализуем данные от 0 до максимального значения разрядности
+        # Это сохраняет абсолютные значения светимости: 0 света = 0, 65535 = 1
+        shot = raw_shot / bit_depth_max
+        background = raw_background / bit_depth_max
 
-        # difference нормализуется относительно своего максимума
-        max_diff = np.max(raw_difference)
-        difference = raw_difference / max_diff if max_diff > 0 else raw_difference
+        # difference нормализуется относительно максимума разрядности
+        difference = raw_difference / bit_depth_max
 
         return {
             'shot': shot,
