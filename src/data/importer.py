@@ -103,12 +103,9 @@ class DataImporter:
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
             logger.info("Определена камера: {}".format(camera_info['name']))
 
-            # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
-            bit_depth_max = 65535.0
-
-            # Нормализуем shot и background на максимум разрядности (как im2double)
-            normalized_shot = shot / bit_depth_max
-            normalized_background = background / bit_depth_max if background is not None else None
+            # Нормализуем shot и background используя ImageNormalizer (как im2double)
+            normalized_shot = ImageNormalizer.normalize(shot)
+            normalized_background = ImageNormalizer.normalize(background) if background is not None else None
 
             # Вычитаем фон если он есть (после нормализации, как в MATLAB)
             if background is not None:
@@ -117,7 +114,6 @@ class DataImporter:
                     # Вычитаем нормализованный фон из нормализованного shot
                     difference = normalized_shot - normalized_background
                     difference[difference < 0] = 0
-                    # БЕЗ дополнительной нормализации - как в MATLAB!
                     # Применяем медианный фильтр к разностному изображению
                     # difference = apply_median_filter(difference, kernel_size=3)
                 else:
@@ -307,12 +303,9 @@ class DataImporter:
                     camera_info = DataImporter._determine_camera_by_shape(shot.shape)
                     result_data.update(camera_info)
 
-                # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
-                bit_depth_max = 65535.0
-
-                # Нормализуем shot и background на максимум разрядности (как im2double)
-                normalized_shot = shot / bit_depth_max
-                normalized_background = background / bit_depth_max if background is not None else None
+                # Нормализуем shot и background используя ImageNormalizer (как im2double)
+                normalized_shot = ImageNormalizer.normalize(shot)
+                normalized_background = ImageNormalizer.normalize(background) if background is not None else None
 
                 # Вычитаем фон если он есть (после нормализации, как в MATLAB)
                 if background is not None:
@@ -321,7 +314,6 @@ class DataImporter:
                         # Вычитаем нормализованный фон из нормализованного shot
                         difference = normalized_shot - normalized_background
                         difference[difference < 0] = 0
-                        # БЕЗ дополнительной нормализации - как в MATLAB!
                         # Применяем медианный фильтр к разностному изображению
                         # difference = apply_median_filter(difference, kernel_size=3)
                     else:
@@ -601,7 +593,7 @@ class DataImporter:
     def _compute_processed_data(raw_shot, raw_background):
         """
         Вычисляет обработанные данные из сырых массивов
-        Реализация аналогична MATLAB im2double: нормализация на 65535
+        Использует ImageNormalizer для нормализации (как MATLAB im2double)
 
         Args:
             raw_shot: Сырой массив снимка
@@ -610,17 +602,13 @@ class DataImporter:
         Returns:
             dict: Словарь с обработанными данными (shot, background, difference)
         """
-        # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
-        bit_depth_max = 65535.0
-
-        # Нормализуем shot и background на максимум разрядности (как im2double)
-        shot = raw_shot / bit_depth_max
-        background = raw_background / bit_depth_max
+        # Нормализуем shot и background используя ImageNormalizer (как im2double)
+        shot = ImageNormalizer.normalize(raw_shot)
+        background = ImageNormalizer.normalize(raw_background)
 
         # Вычитаем нормализованный фон из нормализованного shot (как в MATLAB)
         difference = shot - background
         difference[difference < 0] = 0
-        # БЕЗ дополнительной нормализации - как в MATLAB!
 
         return {
             'shot': shot,

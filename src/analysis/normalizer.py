@@ -25,14 +25,14 @@ class ImageNormalizer:
         массивы с одинаковыми значениями, чтобы избежать ошибок вычисления.
     """
     @staticmethod
-    def normalize(image, reference_image=None):
+    def normalize(image, _reference_image=None):
         """
         Нормализует изображение в диапазоне [0, 1]
+        Реализация аналогична MATLAB im2double: деление на максимальное значение 16-битной камеры (65535)
 
         Args:
             image: Двумерный массив значений светимости для нормализации
-            reference_image: Опциональное референсное изображение для определения min/max значений.
-                           Если None, используются min/max самого изображения.
+            _reference_image: Не используется (оставлен для обратной совместимости)
 
         Returns:
             Нормализованный двумерный массив значений светимости
@@ -45,29 +45,13 @@ class ImageNormalizer:
         # Преобразование в тип float64 для большей точности
         image_float = image.astype(np.float64)
 
-        # Определяем источник для min/max значений
-        if reference_image is not None and reference_image.size > 0:
-            reference_float = reference_image.astype(np.float64)
-            min_val = np.min(reference_float)
-            max_val = np.max(reference_float)
-            logger.debug("Используются min/max из референсного изображения: [{}, {}]".format(min_val, max_val))
-        else:
-            min_val = np.min(image_float)
-            max_val = np.max(image_float)
-            logger.debug("Используются min/max из самого изображения: [{}, {}]".format(min_val, max_val))
+        # Максимальное значение для 16-битной камеры (как im2double в MATLAB)
+        bit_depth_max = 65535.0
 
-        # Избегаем деления на ноль
-        if max_val == min_val:
-            logger.warning("Референсный диапазон содержит одинаковые значения. Возвращается нулевой массив.")
-            return np.zeros_like(image_float, dtype=np.float64)
+        # Нормализация делением на максимум разрядности (как im2double в MATLAB)
+        normalized = image_float / bit_depth_max
 
-        # Нормализация в диапазон [0, 1] с использованием референсных min/max
-        normalized = (image_float - min_val) / (max_val - min_val)
-
-        # Ограничиваем значения в диапазоне [0, 1] на случай, если image выходит за пределы reference
-        normalized = np.clip(normalized, 0, 1)
-
-        logger.debug("Нормализация массива завершена успешно")
+        logger.debug("Нормализация массива завершена успешно (деление на 65535)")
 
         return normalized
 
