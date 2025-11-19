@@ -540,9 +540,92 @@ class DataImporter:
         return DataImporter.import_multifile_csv(metadata_filepath)
 
     @staticmethod
+    def _load_csv_array(array_path, expected_shape=None):
+        """
+        Загружает массив из CSV файла
+
+        Args:
+            array_path: Путь к CSV файлу
+            expected_shape: Ожидаемая форма массива (опционально)
+
+        Returns:
+            numpy.ndarray или None в случае ошибки
+        """
+        try:
+            # Читаем файл построчно
+            with open(array_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            # Убираем пустые строки
+            data_rows = [line.strip() for line in lines if line.strip()]
+
+            if not data_rows:
+                logger.warning("Файл {} пуст".format(array_path))
+                return None
+
+            # Преобразуем строки в numpy массив
+            try:
+                # Пытаемся разделить по запятой (CSV)
+                data_array = np.array([[float(val) for val in row.split(',')]
+                                    for row in data_rows])
+            except ValueError:
+                # Если не получилось, пробуем по пробелам
+                try:
+                    data_array = np.array([[float(val) for val in row.split()]
+                                        for row in data_rows])
+                except Exception as e:
+                    logger.error("Не удалось разобрать данные в файле {}: {}".format(array_path, e))
+                    return None
+
+            # Если указана ожидаемая форма и текущая форма не соответствует, пробуем изменить
+            if expected_shape and data_array.shape != expected_shape:
+                try:
+                    data_array = data_array.flatten().reshape(expected_shape)
+                except Exception as e:
+                    logger.warning("Не удалось преобразовать массив к форме {}: {}".format(expected_shape, e))
+
+            logger.info("Успешно загружен массив из {}, форма: {}".format(array_path, data_array.shape))
+            return data_array
+
+        except Exception as e:
+            logger.error("Ошибка при чтении файла {}: {}".format(array_path, e))
+            return None
+
+    @staticmethod
+    def _compute_processed_data(raw_shot, raw_background):
+        """
+        Вычисляет обработанные данные из сырых массивов
+
+        Args:
+            raw_shot: Сырой массив снимка
+            raw_background: Сырой массив фона
+
+        Returns:
+            dict: Словарь с обработанными данными (shot, background, difference)
+        """
+        # Вычисляем разность
+        raw_difference = raw_shot - raw_background
+        raw_difference[raw_difference < 0] = 0
+
+        # Нормализуем данные
+        shot = ImageNormalizer.normalize(raw_shot)
+        background = ImageNormalizer.normalize(raw_background, reference_image=raw_shot)
+        difference = ImageNormalizer.normalize(raw_difference, reference_image=raw_shot)
+
+        return {
+            'shot': shot,
+            'background': background,
+            'difference': difference
+        }
+
+    @staticmethod
     def import_multifile_csv(metadata_filepath):
         """
         Импортирует данные из набора файлов в папке: JSON метаданные и чистые CSV файлы для массивов
+
+        Поддерживает два варианта данных:
+        1. Полные данные: shot.csv, background.csv, difference.csv, raw_shot.csv, raw_background.csv
+        2. Неполные данные: только raw_shot.csv и raw_background.csv (обработанные вычисляются автоматически)
 
         Args:
             metadata_filepath: Путь к JSON файлу с метаданными
@@ -560,114 +643,103 @@ class DataImporter:
 
             # Загружаем метаданные из JSON
             with open(metadata_filepath, 'r', encoding='utf-8') as f:
-                result_data = json.load(f)
+                metadata = json.load(f)
 
             # Определяем папку, в которой находятся файлы
             folder_path = os.path.dirname(metadata_filepath)
 
-            # Если в метаданных есть информация о массивах, используем её
-            expected_arrays = []
-            if 'arrays' in result_data:
-                expected_arrays = list(result_data['arrays'].keys())
-            else:
-                # Иначе используем стандартный набор
-                expected_arrays = ['shot', 'background', 'difference']
+            # Определяем, какие массивы нужно загрузить из метаданных
+            arrays_info = metadata.get('arrays', {})
+            available_arrays = list(arrays_info.keys())
 
-            for array_name in expected_arrays:
+            logger.info("Доступные массивы по метаданным: {}".format(available_arrays))
+
+            # Загружаем все доступные массивы
+            loaded_arrays = {}
+            for array_name in available_arrays:
                 array_path = os.path.join(folder_path, "{}.csv".format(array_name))
 
                 if not os.path.exists(array_path):
                     logger.warning("Файл массива не найден: {}".format(array_path))
                     continue
 
-                # Импортируем массив из CSV (только числа, без заголовков)
-                try:
-                    # Читаем файл построчно
-                    with open(array_path, 'r', encoding='utf-8') as f:
-                        lines = f.readlines()
+                # Получаем ожидаемую форму из метаданных
+                expected_shape = None
+                if 'shape' in arrays_info[array_name]:
+                    shape_data = arrays_info[array_name]['shape']
+                    if isinstance(shape_data, list):
+                        expected_shape = tuple(shape_data)
 
-                    # Получаем форму массива из метаданных, если есть
-                    shape = None
-                    if 'arrays' in result_data and array_name in result_data['arrays']:
-                        shape_str = result_data['arrays'][array_name]['shape']
-                        if isinstance(shape_str, list):
-                            shape = tuple(shape_str)
-                        elif isinstance(shape_str, str):
-                            # Преобразуем строку '(rows, cols)' в кортеж
-                            shape_match = re.search(r'\((\d+), (\d+)\)', shape_str)
-                            if shape_match:
-                                shape = (int(shape_match.group(1)), int(shape_match.group(2)))
+                # Загружаем массив
+                array_data = DataImporter._load_csv_array(array_path, expected_shape)
+                if array_data is not None:
+                    loaded_arrays[array_name] = array_data
 
-                    # Убираем пустые строки
-                    data_rows = [line.strip() for line in lines if line.strip()]
+            # Определяем, какой набор данных у нас есть
+            has_full_data = ('shot' in loaded_arrays and 'background' in loaded_arrays)
+            has_raw_data = ('raw_shot' in loaded_arrays and 'raw_background' in loaded_arrays)
 
-                    # Преобразуем строки в numpy массив
-                    if data_rows:
-                        try:
-                            # Сначала пытаемся разделить по запятой (CSV)
-                            data_array = np.array([[float(val) for val in row.split(',')]
-                                                for row in data_rows])
+            logger.info("Проверка наличия данных: полные={}, сырые={}".format(has_full_data, has_raw_data))
 
-                            # Если указана форма и текущая форма не соответствует, пробуем изменить
-                            if shape and data_array.shape != shape:
-                                try:
-                                    # Попробуем преобразовать массив к правильной форме
-                                    data_array = data_array.flatten().reshape(shape)
-                                except:
-                                    logger.warning("Не удалось преобразовать массив {} к форме {}".format(array_name, shape))
+            # Подготавливаем результат с метаданными
+            result_data = {
+                'resolution': metadata.get('resolution'),
+                'pixel_size_x': metadata.get('pixel_size_x'),
+                'pixel_size_y': metadata.get('pixel_size_y'),
+                'camera_name': metadata.get('camera_name'),
+                'date': metadata.get('date')
+            }
 
-                            result_data[array_name] = data_array
-                            logger.info("Успешно импортирован массив: {}, форма: {}".format(array_name, data_array.shape))
-                        except ValueError:
-                            # Если не получилось, пробуем по пробелам
-                            try:
-                                data_array = np.array([[float(val) for val in row.split()]
-                                                    for row in data_rows])
+            if has_full_data:
+                # Вариант 1: Есть полные обработанные данные
+                logger.info("Обнаружены полные данные, используем их напрямую")
 
-                                # Проверяем форму
-                                if shape and data_array.shape != shape:
-                                    try:
-                                        data_array = data_array.flatten().reshape(shape)
-                                    except:
-                                        logger.warning("Не удалось преобразовать массив {} к форме {}".format(array_name, shape))
+                result_data['shot'] = loaded_arrays['shot']
+                result_data['background'] = loaded_arrays['background']
+                result_data['difference'] = loaded_arrays.get('difference')
+                result_data['raw_shot'] = loaded_arrays.get('raw_shot')
+                result_data['raw_background'] = loaded_arrays.get('raw_background')
 
-                                result_data[array_name] = data_array
-                                logger.info("Успешно импортирован массив: {}, форма: {}".format(array_name, data_array.shape))
-                            except Exception as e:
-                                logger.error("Не удалось разобрать данные в файле {}: {}".format(array_path, e))
-                except Exception as e:
-                    logger.error("Ошибка при чтении файла {}: {}".format(array_path, e))
+                # Если нет difference, но есть shot и background, вычисляем
+                if result_data['difference'] is None:
+                    logger.info("Файл difference.csv не найден, вычисляем разность")
+                    raw_diff = result_data['shot'] - result_data['background']
+                    raw_diff[raw_diff < 0] = 0
+                    result_data['difference'] = ImageNormalizer.normalize(raw_diff, reference_image=result_data['shot'])
 
-            # Проверяем наличие необходимых массивов
-            if 'shot' not in result_data or 'background' not in result_data:
-                logger.error("Не найдены необходимые массивы данных (shot и/или background)")
+            elif has_raw_data:
+                # Вариант 2: Есть только сырые данные, вычисляем обработанные
+                logger.info("Обнаружены только сырые данные, вычисляем обработанные")
+
+                raw_shot = loaded_arrays['raw_shot']
+                raw_background = loaded_arrays['raw_background']
+
+                # Проверяем совпадение размеров
+                if raw_shot.shape != raw_background.shape:
+                    logger.error("Размеры raw_shot ({}) и raw_background ({}) не совпадают".format(
+                        raw_shot.shape, raw_background.shape))
+                    return None
+
+                # Вычисляем обработанные данные
+                processed = DataImporter._compute_processed_data(raw_shot, raw_background)
+
+                result_data['raw_shot'] = raw_shot
+                result_data['raw_background'] = raw_background
+                result_data['shot'] = processed['shot']
+                result_data['background'] = processed['background']
+                result_data['difference'] = processed['difference']
+
+            else:
+                # Нет ни полных, ни сырых данных
+                logger.error("Не найдены необходимые массивы данных. "
+                           "Требуются либо (shot и background), либо (raw_shot и raw_background)")
                 return None
 
-            # Проверяем совпадение размеров массивов
-            if result_data['shot'].shape != result_data['background'].shape:
-                logger.error("Размеры массивов shot и background не совпадают: "
-                           "{} vs {}".format(result_data['shot'].shape, result_data['background'].shape))
-                return None
-
-            # Добавляем разность, если её нет
-            if 'difference' not in result_data:
-                difference = result_data['shot'] - result_data['background']
-                difference[difference < 0] = 0
-                # Нормализуем и фильтруем, чтобы привести к единому виду
-                difference = ImageNormalizer.normalize(difference, reference_image=result_data['shot'])
-                # difference = apply_median_filter(difference, kernel_size=3)
-                result_data['difference'] = difference
-                logger.info("Автоматически рассчитана разность shot - background")
-
-            # Добавляем дополнительные поля, если их нет
-            if 'current_frame' not in result_data:
-                result_data['current_frame'] = result_data['shot']
-            if 'centroid' not in result_data:
-                result_data['centroid'] = (0, 0)
-            if 'rms' not in result_data:
-                result_data['rms'] = (0, 0)
-            if 'filepath' not in result_data:
-                result_data['filepath'] = folder_path
+            # Добавляем дополнительные поля для совместимости с UI
+            result_data['current_frame'] = result_data['shot']
+            result_data['centroid'] = (0, 0)
+            result_data['rms'] = (0, 0)
+            result_data['filepath'] = folder_path
 
             logger.info("Успешно импортированы данные из папки: {}".format(folder_path))
             return result_data
