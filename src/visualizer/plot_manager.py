@@ -50,11 +50,11 @@ class PlotManager:
             data_downsampled = data[::step_y, ::step_x]
             x_downsampled = x_mm[::step_x]
             y_downsampled = y_mm[::step_y]
-            im = ax.imshow(data_downsampled, cmap=self.colormap, origin='lower',
+            im = ax.imshow(data_downsampled, cmap=self.colormap, origin='upper',
                            extent=[x_downsampled[0], x_downsampled[-1], y_downsampled[0], y_downsampled[-1]],
                            aspect='auto', interpolation='bilinear')
         else:
-            im = ax.imshow(data, cmap=self.colormap, origin='lower',
+            im = ax.imshow(data, cmap=self.colormap, origin='upper',
                            extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
                            aspect='auto', interpolation='bilinear')
 
@@ -150,6 +150,9 @@ class PlotManager:
         # Настраиваем оси
         ax_y.set_ylim(y_coords[0], y_coords[-1])
         ax_y.set_xlim(0, 1.05)
+
+        # Инвертируем ось X, чтобы она шла от тепловой карты к краю окна
+        ax_y.invert_xaxis()
 
         return fig_x, fig_y
 

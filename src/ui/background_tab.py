@@ -183,7 +183,7 @@ class BackgroundTab(QWidget):
         im = ax_heatmap.imshow(
             img_data,
             extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
-            origin='lower',
+            origin='upper',
             aspect='auto',
             cmap='jet'
         )
@@ -217,6 +217,9 @@ class BackgroundTab(QWidget):
         ax_y_proj.set_ylabel('Y (mm)')
         ax_y_proj.set_xlabel('Intensity')
         ax_y_proj.grid(True, linestyle='--', alpha=0.7)
+
+        # Invert X axis to make it go from heatmap to window edge
+        ax_y_proj.invert_xaxis()
 
         # Equalize axes
         ax_y_proj.set_ylim(ax_heatmap.get_ylim())
