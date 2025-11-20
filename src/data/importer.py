@@ -4,6 +4,7 @@ import re
 import scipy.io as sio
 import pandas as pd
 import json
+from src.negative_numbers_evaluation import plot_negative_density
 
 from src.analysis.normalizer import ImageNormalizer
 
@@ -114,7 +115,9 @@ class DataImporter:
                 if shot.shape == background.shape:
                     # Вычитаем нормализованный фон из нормализованного shot
                     difference = normalized_shot - normalized_background
-                    difference[difference < 0] = 0
+                    plot_negative_density(difference, "negative_density", "negative_density.png")
+                    # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
+                    # difference[difference < 0] = 0
                     # Применяем медианный фильтр к разностному изображению
                     # difference = apply_median_filter(difference, kernel_size=3)
                 else:
@@ -314,7 +317,12 @@ class DataImporter:
                     if shot.shape == background.shape:
                         # Вычитаем нормализованный фон из нормализованного shot
                         difference = normalized_shot - normalized_background
-                        difference[difference < 0] = 0
+                        # Логируем количество отрицательных значений
+                        negative_count = np.sum(difference < 0)
+                        logger.info("Количество отрицательных значений в difference после вычитания фона: {} из {} ({:.2f}%)".format(
+                            negative_count, difference.size, 100.0 * negative_count / difference.size))
+                        # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
+                        # difference[difference < 0] = 0
                         # Применяем медианный фильтр к разностному изображению
                         # difference = apply_median_filter(difference, kernel_size=3)
                     else:
@@ -609,7 +617,12 @@ class DataImporter:
 
         # Вычитаем нормализованный фон из нормализованного shot (как в MATLAB)
         difference = shot - background
-        difference[difference < 0] = 0
+        # Логируем количество отрицательных значений
+        negative_count = np.sum(difference < 0)
+        logger.info("Количество отрицательных значений в difference после вычитания фона: {} из {} ({:.2f}%)".format(
+            negative_count, difference.size, 100.0 * negative_count / difference.size))
+        # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
+        # difference[difference < 0] = 0
 
         return {
             'shot': shot,
@@ -704,7 +717,12 @@ class DataImporter:
                     logger.info("Файл difference.csv не найден, вычисляем разность")
                     # shot и background уже нормализованы (из CSV), просто вычитаем
                     raw_diff = result_data['shot'] - result_data['background']
-                    raw_diff[raw_diff < 0] = 0
+                    # Логируем количество отрицательных значений
+                    negative_count = np.sum(raw_diff < 0)
+                    logger.info("Количество отрицательных значений в difference после вычитания фона: {} из {} ({:.2f}%)".format(
+                        negative_count, raw_diff.size, 100.0 * negative_count / raw_diff.size))
+                    # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
+                    # raw_diff[raw_diff < 0] = 0
                     result_data['difference'] = raw_diff  # БЕЗ повторной нормализации!
 
             elif has_raw_data:
