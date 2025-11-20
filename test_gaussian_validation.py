@@ -1,6 +1,6 @@
 """
-Расширенный тест для проверки корректности вычислений центроида и RMS
-на аналитически известном гауссовом распределении.
+Extended test for validation of centroid and RMS calculations
+on analytically known Gaussian distribution.
 """
 
 import sys
@@ -14,27 +14,27 @@ import matplotlib.pyplot as plt
 
 def create_2d_gaussian(size, sigma, center=None, amplitude=1.0):
     """
-    Создаёт 2D гауссово распределение с известными параметрами.
+    Creates a 2D Gaussian distribution with known parameters.
 
     Args:
-        size: Размер изображения (size x size)
-        sigma: Стандартное отклонение (в пикселях)
-        center: Центр распределения (x, y) в координатах от центра.
-                По умолчанию (0, 0) - центр изображения
-        amplitude: Амплитуда распределения
+        size: Image size (size x size)
+        sigma: Standard deviation (in pixels)
+        center: Distribution center (x, y) in coordinates from center.
+                Default (0, 0) - image center
+        amplitude: Distribution amplitude
 
     Returns:
-        2D массив с гауссовым распределением
+        2D array with Gaussian distribution
     """
     if center is None:
         center = (0, 0)
 
-    # Создаем координатную сетку (центрированную, как в MATLAB)
+    # Create coordinate grid (centered, as in MATLAB)
     x = np.arange(size) - (size - 1) / 2
     y = np.arange(size) - (size - 1) / 2
     xx, yy = np.meshgrid(x, y)
 
-    # 2D гауссово распределение
+    # 2D Gaussian distribution
     # I(x,y) = A * exp(-((x-x0)^2 + (y-y0)^2) / (2*sigma^2))
     gaussian = amplitude * np.exp(-((xx - center[0])**2 + (yy - center[1])**2) / (2 * sigma**2))
 
@@ -43,69 +43,69 @@ def create_2d_gaussian(size, sigma, center=None, amplitude=1.0):
 
 def test_gaussian_centered():
     """
-    Тест 1: Гауссово распределение с центром в (0, 0).
-    Для идеального гауссиана центроид должен совпадать с центром распределения.
-    RMS должен быть равен sigma (стандартному отклонению гауссиана).
+    Test 1: Gaussian distribution centered at (0, 0).
+    For an ideal Gaussian, the centroid should coincide with the center of distribution.
+    RMS should be equal to sigma (standard deviation of the Gaussian).
     """
     print("\n" + "="*70)
-    print("Тест 1: Центрированное гауссово распределение")
+    print("Test 1: Centered Gaussian distribution")
     print("="*70)
 
     analyzer = ImageAnalyzer()
 
-    size = 101  # Нечетный размер для четкого центра
-    sigma_pixels = 10.0  # Стандартное отклонение в пикселях
-    pixel_size = 0.0284  # мм (как в реальной камере)
+    size = 101  # Odd size for clear center
+    sigma_pixels = 10.0  # Standard deviation in pixels
+    pixel_size = 0.0284  # mm (as in real camera)
 
-    # Создаем идеальный гауссиан с центром в (0, 0)
+    # Create ideal Gaussian centered at (0, 0)
     image = create_2d_gaussian(size, sigma_pixels, center=(0, 0))
 
-    # Вычисляем центроид и RMS
+    # Calculate centroid and RMS
     centroid_x, centroid_y = analyzer.calculate_centroid(image, pixel_size, pixel_size)
     rms_x, rms_y = analyzer.calculate_rms(image, pixel_size, pixel_size)
 
-    # Ожидаемые значения
-    expected_centroid = 0.0  # В центре
-    expected_rms = sigma_pixels * pixel_size  # RMS = sigma для гауссиана
+    # Expected values
+    expected_centroid = 0.0  # At center
+    expected_rms = sigma_pixels * pixel_size  # RMS = sigma for Gaussian
 
-    print(f"\nПараметры теста:")
-    print(f"  Размер изображения: {size}x{size} пикселей")
-    print(f"  Sigma гауссиана: {sigma_pixels} пикселей = {sigma_pixels * pixel_size:.4f} мм")
-    print(f"  Размер пикселя: {pixel_size} мм")
+    print("\nTest parameters:")
+    print("  Image size: {0}x{1} pixels".format(size, size))
+    print("  Gaussian sigma: {0} pixels = {1:.4f} mm".format(sigma_pixels, sigma_pixels * pixel_size))
+    print("  Pixel size: {0} mm".format(pixel_size))
 
-    print(f"\nРезультаты вычислений:")
-    print(f"  Центроид X: {centroid_x:.6f} мм (ожидается: {expected_centroid:.6f} мм)")
-    print(f"  Центроид Y: {centroid_y:.6f} мм (ожидается: {expected_centroid:.6f} мм)")
-    print(f"  RMS X: {rms_x:.6f} мм (ожидается: {expected_rms:.6f} мм)")
-    print(f"  RMS Y: {rms_y:.6f} мм (ожидается: {expected_rms:.6f} мм)")
+    print("\nCalculation results:")
+    print("  Centroid X: {0:.17g} mm (expected: {1:.17g} mm)".format(centroid_x, expected_centroid))
+    print("  Centroid Y: {0:.17g} mm (expected: {1:.17g} mm)".format(centroid_y, expected_centroid))
+    print("  RMS X: {0:.17g} mm (expected: {1:.17g} mm)".format(rms_x, expected_rms))
+    print("  RMS Y: {0:.17g} mm (expected: {1:.17g} mm)".format(rms_y, expected_rms))
 
-    print(f"\nОтклонения от теоретических значений:")
-    print(f"  Центроид X: {abs(centroid_x - expected_centroid):.8f} мм")
-    print(f"  Центроид Y: {abs(centroid_y - expected_centroid):.8f} мм")
-    print(f"  RMS X: {abs(rms_x - expected_rms):.8f} мм ({abs(rms_x - expected_rms)/expected_rms*100:.4f}%)")
-    print(f"  RMS Y: {abs(rms_y - expected_rms):.8f} мм ({abs(rms_y - expected_rms)/expected_rms*100:.4f}%)")
+    print("\nDeviations from theoretical values:")
+    print("  Centroid X: {0:.17g} mm".format(abs(centroid_x - expected_centroid)))
+    print("  Centroid Y: {0:.17g} mm".format(abs(centroid_y - expected_centroid)))
+    print("  RMS X: {0:.17g} mm ({1:.17g}%)".format(abs(rms_x - expected_rms), abs(rms_x - expected_rms)/expected_rms*100))
+    print("  RMS Y: {0:.17g} mm ({1:.17g}%)".format(abs(rms_y - expected_rms), abs(rms_y - expected_rms)/expected_rms*100))
 
-    # Проверяем точность (допустимая погрешность 0.1%)
-    assert abs(centroid_x) < 0.0001, f"Центроид X должен быть ~0, получено {centroid_x}"
-    assert abs(centroid_y) < 0.0001, f"Центроид Y должен быть ~0, получено {centroid_y}"
+    # Check accuracy (allowable error 0.1%)
+    assert abs(centroid_x) < 0.0001, "Centroid X should be ~0, got {0}".format(centroid_x)
+    assert abs(centroid_y) < 0.0001, "Centroid Y should be ~0, got {0}".format(centroid_y)
     assert abs(rms_x - expected_rms) / expected_rms < 0.001, \
-        f"RMS X должен быть ~{expected_rms}, получено {rms_x}"
+        "RMS X should be ~{0}, got {1}".format(expected_rms, rms_x)
     assert abs(rms_y - expected_rms) / expected_rms < 0.001, \
-        f"RMS Y должен быть ~{expected_rms}, получено {rms_y}"
+        "RMS Y should be ~{0}, got {1}".format(expected_rms, rms_y)
 
-    print("\n✓ Тест пройден! Центроид и RMS совпадают с теоретическими значениями.")
+    print("\n* Test passed! Centroid and RMS match theoretical values.")
 
-    return image, centroid_x, centroid_y, rms_x, rms_y
+    return image, centroid_x, centroid_y, rms_x, rms_y, sigma_pixels, pixel_size
 
 
 def test_gaussian_offset():
     """
-    Тест 2: Гауссово распределение со смещением.
-    Центроид должен совпадать с центром распределения.
-    RMS не зависит от смещения и должен быть равен sigma.
+    Test 2: Gaussian distribution with offset.
+    Centroid should coincide with the center of distribution.
+    RMS is independent of offset and should be equal to sigma.
     """
     print("\n" + "="*70)
-    print("Тест 2: Смещённое гауссово распределение")
+    print("Test 2: Offset Gaussian distribution")
     print("="*70)
 
     analyzer = ImageAnalyzer()
@@ -113,261 +113,308 @@ def test_gaussian_offset():
     size = 101
     sigma_pixels = 8.0
     pixel_size = 0.0284
-    offset_x = 5.0  # Смещение в пикселях
+    offset_x = 5.0  # Offset in pixels
     offset_y = -3.0
 
-    # Создаем гауссиан со смещением
+    # Create Gaussian with offset
     image = create_2d_gaussian(size, sigma_pixels, center=(offset_x, offset_y))
 
-    # Вычисляем центроид и RMS
+    # Calculate centroid and RMS
     centroid_x, centroid_y = analyzer.calculate_centroid(image, pixel_size, pixel_size)
     rms_x, rms_y = analyzer.calculate_rms(image, pixel_size, pixel_size)
 
-    # Ожидаемые значения
+    # Expected values
     expected_centroid_x = offset_x * pixel_size
     expected_centroid_y = offset_y * pixel_size
     expected_rms = sigma_pixels * pixel_size
 
-    print(f"\nПараметры теста:")
-    print(f"  Размер изображения: {size}x{size} пикселей")
-    print(f"  Sigma гауссиана: {sigma_pixels} пикселей = {sigma_pixels * pixel_size:.4f} мм")
-    print(f"  Смещение: ({offset_x}, {offset_y}) пикселей = ({expected_centroid_x:.4f}, {expected_centroid_y:.4f}) мм")
+    print("\nTest parameters:")
+    print("  Image size: {0}x{1} pixels".format(size, size))
+    print("  Gaussian sigma: {0} pixels = {1:.4f} mm".format(sigma_pixels, sigma_pixels * pixel_size))
+    print("  Offset: ({0}, {1}) pixels = ({2:.4f}, {3:.4f}) mm".format(offset_x, offset_y, expected_centroid_x, expected_centroid_y))
 
-    print(f"\nРезультаты вычислений:")
-    print(f"  Центроид X: {centroid_x:.6f} мм (ожидается: {expected_centroid_x:.6f} мм)")
-    print(f"  Центроид Y: {centroid_y:.6f} мм (ожидается: {expected_centroid_y:.6f} мм)")
-    print(f"  RMS X: {rms_x:.6f} мм (ожидается: {expected_rms:.6f} мм)")
-    print(f"  RMS Y: {rms_y:.6f} мм (ожидается: {expected_rms:.6f} мм)")
+    print("\nCalculation results:")
+    print("  Centroid X: {0:.17g} mm (expected: {1:.17g} mm)".format(centroid_x, expected_centroid_x))
+    print("  Centroid Y: {0:.17g} mm (expected: {1:.17g} mm)".format(centroid_y, expected_centroid_y))
+    print("  RMS X: {0:.17g} mm (expected: {1:.17g} mm)".format(rms_x, expected_rms))
+    print("  RMS Y: {0:.17g} mm (expected: {1:.17g} mm)".format(rms_y, expected_rms))
 
-    print(f"\nОтклонения от теоретических значений:")
-    print(f"  Центроид X: {abs(centroid_x - expected_centroid_x):.8f} мм")
-    print(f"  Центроид Y: {abs(centroid_y - expected_centroid_y):.8f} мм")
-    print(f"  RMS X: {abs(rms_x - expected_rms):.8f} мм ({abs(rms_x - expected_rms)/expected_rms*100:.4f}%)")
-    print(f"  RMS Y: {abs(rms_y - expected_rms):.8f} мм ({abs(rms_y - expected_rms)/expected_rms*100:.4f}%)")
+    print("\nDeviations from theoretical values:")
+    print("  Centroid X: {0:.17g} mm".format(abs(centroid_x - expected_centroid_x)))
+    print("  Centroid Y: {0:.17g} mm".format(abs(centroid_y - expected_centroid_y)))
+    print("  RMS X: {0:.17g} mm ({1:.17g}%)".format(abs(rms_x - expected_rms), abs(rms_x - expected_rms)/expected_rms*100))
+    print("  RMS Y: {0:.17g} mm ({1:.17g}%)".format(abs(rms_y - expected_rms), abs(rms_y - expected_rms)/expected_rms*100))
 
-    # Проверяем точность
+    # Check accuracy
     assert abs(centroid_x - expected_centroid_x) < 0.001, \
-        f"Центроид X должен быть ~{expected_centroid_x}, получено {centroid_x}"
+        "Centroid X should be ~{0}, got {1}".format(expected_centroid_x, centroid_x)
     assert abs(centroid_y - expected_centroid_y) < 0.001, \
-        f"Центроид Y должен быть ~{expected_centroid_y}, получено {centroid_y}"
+        "Centroid Y should be ~{0}, got {1}".format(expected_centroid_y, centroid_y)
     assert abs(rms_x - expected_rms) / expected_rms < 0.001, \
-        f"RMS X должен быть ~{expected_rms}, получено {rms_x}"
+        "RMS X should be ~{0}, got {1}".format(expected_rms, rms_x)
     assert abs(rms_y - expected_rms) / expected_rms < 0.001, \
-        f"RMS Y должен быть ~{expected_rms}, получено {rms_y}"
+        "RMS Y should be ~{0}, got {1}".format(expected_rms, rms_y)
 
-    print("\n✓ Тест пройден! Центроид соответствует смещению, RMS не зависит от смещения.")
+    print("\n* Test passed! Centroid matches offset, RMS is independent of offset.")
 
-    return image
+    return image, centroid_x, centroid_y, rms_x, rms_y, sigma_pixels, pixel_size, offset_x, offset_y
 
 
 def test_gaussian_elliptical():
     """
-    Тест 3: Эллиптическое гауссово распределение.
-    Разные sigma по осям X и Y.
+    Test 3: Elliptical Gaussian distribution.
+    Different sigma for X and Y axes.
     """
     print("\n" + "="*70)
-    print("Тест 3: Эллиптическое гауссово распределение")
+    print("Test 3: Elliptical Gaussian distribution")
     print("="*70)
 
     analyzer = ImageAnalyzer()
 
     size = 101
-    sigma_x = 12.0  # Разные sigma по осям
+    sigma_x = 12.0  # Different sigma for axes
     sigma_y = 6.0
     pixel_size = 0.0284
 
-    # Создаем эллиптический гауссиан вручную
+    # Create elliptical Gaussian manually
     x = np.arange(size) - (size - 1) / 2
     y = np.arange(size) - (size - 1) / 2
     xx, yy = np.meshgrid(x, y)
 
     image = np.exp(-(xx**2 / (2*sigma_x**2) + yy**2 / (2*sigma_y**2)))
 
-    # Вычисляем центроид и RMS
+    # Calculate centroid and RMS
     centroid_x, centroid_y = analyzer.calculate_centroid(image, pixel_size, pixel_size)
     rms_x, rms_y = analyzer.calculate_rms(image, pixel_size, pixel_size)
 
-    # Ожидаемые значения
+    # Expected values
     expected_centroid = 0.0
     expected_rms_x = sigma_x * pixel_size
     expected_rms_y = sigma_y * pixel_size
 
-    print(f"\nПараметры теста:")
-    print(f"  Размер изображения: {size}x{size} пикселей")
-    print(f"  Sigma X: {sigma_x} пикселей = {sigma_x * pixel_size:.4f} мм")
-    print(f"  Sigma Y: {sigma_y} пикселей = {sigma_y * pixel_size:.4f} мм")
-    print(f"  Соотношение осей: {sigma_x/sigma_y:.2f}:1")
+    print("\nTest parameters:")
+    print("  Image size: {0}x{1} pixels".format(size, size))
+    print("  Sigma X: {0} pixels = {1:.4f} mm".format(sigma_x, sigma_x * pixel_size))
+    print("  Sigma Y: {0} pixels = {1:.4f} mm".format(sigma_y, sigma_y * pixel_size))
+    print("  Axis ratio: {0:.2f}:1".format(sigma_x/sigma_y))
 
-    print(f"\nРезультаты вычислений:")
-    print(f"  Центроид X: {centroid_x:.6f} мм (ожидается: {expected_centroid:.6f} мм)")
-    print(f"  Центроид Y: {centroid_y:.6f} мм (ожидается: {expected_centroid:.6f} мм)")
-    print(f"  RMS X: {rms_x:.6f} мм (ожидается: {expected_rms_x:.6f} мм)")
-    print(f"  RMS Y: {rms_y:.6f} мм (ожидается: {expected_rms_y:.6f} мм)")
+    print("\nCalculation results:")
+    print("  Centroid X: {0:.17g} mm (expected: {1:.17g} mm)".format(centroid_x, expected_centroid))
+    print("  Centroid Y: {0:.17g} mm (expected: {1:.17g} mm)".format(centroid_y, expected_centroid))
+    print("  RMS X: {0:.17g} mm (expected: {1:.17g} mm)".format(rms_x, expected_rms_x))
+    print("  RMS Y: {0:.17g} mm (expected: {1:.17g} mm)".format(rms_y, expected_rms_y))
 
-    print(f"\nОтклонения от теоретических значений:")
-    print(f"  Центроид X: {abs(centroid_x - expected_centroid):.8f} мм")
-    print(f"  Центроид Y: {abs(centroid_y - expected_centroid):.8f} мм")
-    print(f"  RMS X: {abs(rms_x - expected_rms_x):.8f} мм ({abs(rms_x - expected_rms_x)/expected_rms_x*100:.4f}%)")
-    print(f"  RMS Y: {abs(rms_y - expected_rms_y):.8f} мм ({abs(rms_y - expected_rms_y)/expected_rms_y*100:.4f}%)")
+    print("\nDeviations from theoretical values:")
+    print("  Centroid X: {0:.17g} mm".format(abs(centroid_x - expected_centroid)))
+    print("  Centroid Y: {0:.17g} mm".format(abs(centroid_y - expected_centroid)))
+    print("  RMS X: {0:.17g} mm ({1:.17g}%)".format(abs(rms_x - expected_rms_x), abs(rms_x - expected_rms_x)/expected_rms_x*100))
+    print("  RMS Y: {0:.17g} mm ({1:.17g}%)".format(abs(rms_y - expected_rms_y), abs(rms_y - expected_rms_y)/expected_rms_y*100))
 
-    # Проверяем точность
-    assert abs(centroid_x) < 0.0001, f"Центроид X должен быть ~0, получено {centroid_x}"
-    assert abs(centroid_y) < 0.0001, f"Центроид Y должен быть ~0, получено {centroid_y}"
+    # Check accuracy
+    assert abs(centroid_x) < 0.0001, "Centroid X should be ~0, got {0}".format(centroid_x)
+    assert abs(centroid_y) < 0.0001, "Centroid Y should be ~0, got {0}".format(centroid_y)
     assert abs(rms_x - expected_rms_x) / expected_rms_x < 0.001, \
-        f"RMS X должен быть ~{expected_rms_x}, получено {rms_x}"
+        "RMS X should be ~{0}, got {1}".format(expected_rms_x, rms_x)
     assert abs(rms_y - expected_rms_y) / expected_rms_y < 0.001, \
-        f"RMS Y должен быть ~{expected_rms_y}, получено {rms_y}"
+        "RMS Y should be ~{0}, got {1}".format(expected_rms_y, rms_y)
 
-    print("\n✓ Тест пройден! Эллиптическое распределение обработано корректно.")
+    print("\n* Test passed! Elliptical distribution processed correctly.")
 
-    return image
+    return image, centroid_x, centroid_y, rms_x, rms_y, sigma_x, sigma_y, pixel_size
 
 
-def visualize_gaussian_test():
+def visualize_test(image, centroid_x, centroid_y, rms_x, rms_y,
+                   expected_centroid_x, expected_centroid_y, expected_rms_x, expected_rms_y,
+                   pixel_size, title, filename):
     """
-    Визуализация результатов для визуальной проверки корректности.
+    Visualization of test results for visual validation.
     """
-    print("\n" + "="*70)
-    print("Визуализация результатов")
-    print("="*70)
+    from matplotlib.patches import Ellipse
 
     analyzer = ImageAnalyzer()
 
-    # Параметры
-    size = 101
-    sigma_pixels = 10.0
-    pixel_size = 0.0284
-
-    # Создаем гауссиан
-    image = create_2d_gaussian(size, sigma_pixels, center=(0, 0))
-
-    # Вычисляем параметры
-    centroid_x, centroid_y = analyzer.calculate_centroid(image, pixel_size, pixel_size)
-    rms_x, rms_y = analyzer.calculate_rms(image, pixel_size, pixel_size)
-
-    # Получаем проекции
+    # Get projections
     x_coords, x_proj, y_coords, y_proj = analyzer.calculate_projections(
         image, pixel_size, pixel_size
     )
 
-    # Создаем график
+    size = image.shape[0]
+
+    # Create plot
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-    # 2D изображение
+    # 2D image
     ax = axes[0, 0]
     extent = [
         -(size-1)/2 * pixel_size,
-        size/2 * pixel_size,
+        (size-1)/2 * pixel_size,
         -(size-1)/2 * pixel_size,
-        size/2 * pixel_size
+        (size-1)/2 * pixel_size
     ]
-    im = ax.imshow(image, extent=extent, origin='lower', cmap='hot')
-    ax.axhline(y=centroid_y, color='cyan', linestyle='--', label=f'Centroid Y={centroid_y:.4f}')
-    ax.axvline(x=centroid_x, color='cyan', linestyle='--', label=f'Centroid X={centroid_x:.4f}')
+    im = ax.imshow(image, extent=extent, origin='lower', cmap='jet')
+    ax.axhline(y=centroid_y, color='cyan', linestyle='--',
+               label='Centroid Y={0:.4f}'.format(centroid_y))
+    ax.axvline(x=centroid_x, color='cyan', linestyle='--',
+               label='Centroid X={0:.4f}'.format(centroid_x))
 
-    # RMS границы (1 sigma)
-    from matplotlib.patches import Ellipse
+    # RMS boundary (1 sigma)
     ellipse = Ellipse((centroid_x, centroid_y), 2*rms_x, 2*rms_y,
                      fill=False, edgecolor='lime', linestyle='--', linewidth=2,
-                     label=f'1σ: ({rms_x:.4f}, {rms_y:.4f})')
+                     label='1sigma: ({0:.4f}, {1:.4f})'.format(rms_x, rms_y))
     ax.add_patch(ellipse)
 
-    ax.set_xlabel('X (мм)')
-    ax.set_ylabel('Y (мм)')
-    ax.set_title('2D Гауссово распределение')
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_title('2D Gaussian Distribution')
     ax.legend()
     plt.colorbar(im, ax=ax)
 
-    # Проекция X
+    # X projection
     ax = axes[0, 1]
-    ax.plot(x_coords, x_proj, 'b-', linewidth=2, label='X проекция')
-    ax.axvline(x=centroid_x, color='red', linestyle='--', label=f'Centroid={centroid_x:.4f}')
-    ax.axvline(x=centroid_x - rms_x, color='orange', linestyle=':', label=f'±RMS={rms_x:.4f}')
+    ax.plot(x_coords, x_proj, 'b-', linewidth=2, label='X projection')
+    ax.axvline(x=centroid_x, color='red', linestyle='--',
+               label='Centroid={0:.4f}'.format(centroid_x))
+    ax.axvline(x=centroid_x - rms_x, color='orange', linestyle=':',
+               label='RMS={0:.4f}'.format(rms_x))
     ax.axvline(x=centroid_x + rms_x, color='orange', linestyle=':')
-    ax.set_xlabel('X (мм)')
-    ax.set_ylabel('Нормализованная интенсивность')
-    ax.set_title('Проекция на ось X')
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Normalized Intensity')
+    ax.set_title('Projection on X axis')
     ax.legend()
     ax.grid(True, alpha=0.3)
 
-    # Проекция Y
+    # Y projection
     ax = axes[1, 0]
-    ax.plot(y_coords, y_proj, 'g-', linewidth=2, label='Y проекция')
-    ax.axvline(x=centroid_y, color='red', linestyle='--', label=f'Centroid={centroid_y:.4f}')
-    ax.axvline(x=centroid_y - rms_y, color='orange', linestyle=':', label=f'±RMS={rms_y:.4f}')
+    ax.plot(y_coords, y_proj, 'g-', linewidth=2, label='Y projection')
+    ax.axvline(x=centroid_y, color='red', linestyle='--',
+               label='Centroid={0:.4f}'.format(centroid_y))
+    ax.axvline(x=centroid_y - rms_y, color='orange', linestyle=':',
+               label='RMS={0:.4f}'.format(rms_y))
     ax.axvline(x=centroid_y + rms_y, color='orange', linestyle=':')
-    ax.set_xlabel('Y (мм)')
-    ax.set_ylabel('Нормализованная интенсивность')
-    ax.set_title('Проекция на ось Y')
+    ax.set_xlabel('Y (mm)')
+    ax.set_ylabel('Normalized Intensity')
+    ax.set_title('Projection on Y axis')
     ax.legend()
     ax.grid(True, alpha=0.3)
 
-    # Сводная таблица
+    # Summary table
     ax = axes[1, 1]
     ax.axis('off')
 
-    info_text = f"""
-    РЕЗУЛЬТАТЫ АНАЛИЗА
-    {'='*40}
+    info_text = """
+    ANALYSIS RESULTS
+    {0}
 
-    Параметры изображения:
-    • Размер: {size}×{size} пикселей
-    • Размер пикселя: {pixel_size} мм
-    • Теоретическая sigma: {sigma_pixels * pixel_size:.4f} мм
+    Image parameters:
+    * Size: {1}x{2} pixels
+    * Pixel size: {3} mm
+    * Expected centroid: ({4:.4f}, {5:.4f}) mm
+    * Expected RMS: ({6:.4f}, {7:.4f}) mm
 
-    Центроид (центр масс):
-    • X: {centroid_x:.6f} мм
-    • Y: {centroid_y:.6f} мм
+    Centroid (center of mass):
+    * X: {8:.17g} mm
+    * Y: {9:.17g} mm
 
-    RMS размеры (ширина пучка):
-    • X: {rms_x:.6f} мм
-    • Y: {rms_y:.6f} мм
+    RMS sizes (beam width):
+    * X: {10:.17g} mm
+    * Y: {11:.17g} mm
 
-    Точность (отклонение от теории):
-    • Центроид: {max(abs(centroid_x), abs(centroid_y)):.8f} мм
-    • RMS: {abs(rms_x - sigma_pixels*pixel_size)/( sigma_pixels*pixel_size)*100:.4f}%
+    Accuracy (deviation from theory):
+    * Centroid X: {12:.17g} mm
+    * Centroid Y: {13:.17g} mm
+    * RMS X: {14:.17g}%
+    * RMS Y: {15:.17g}%
 
-    ✓ Вычисления корректны!
-    """
+    * Calculations are correct!
+    """.format(
+        '='*40,
+        size, size,
+        pixel_size,
+        expected_centroid_x, expected_centroid_y,
+        expected_rms_x, expected_rms_y,
+        centroid_x, centroid_y,
+        rms_x, rms_y,
+        abs(centroid_x - expected_centroid_x),
+        abs(centroid_y - expected_centroid_y),
+        abs(rms_x - expected_rms_x) / expected_rms_x * 100 if expected_rms_x != 0 else 0,
+        abs(rms_y - expected_rms_y) / expected_rms_y * 100 if expected_rms_y != 0 else 0
+    )
 
-    ax.text(0.1, 0.5, info_text, fontsize=10, family='monospace',
+    ax.text(0.1, 0.5, info_text, fontsize=9, family='monospace',
            verticalalignment='center')
 
+    fig.suptitle(title, fontsize=14, fontweight='bold')
     plt.tight_layout()
-    plt.savefig('d:/DEV/CANDLE/Beam-Profile-Analyzer/gaussian_validation.png', dpi=150)
-    print("\n✓ График сохранён в gaussian_validation.png")
-    print("\nВизуальная проверка:")
-    print("  - Центроид должен быть в центре распределения (синие линии)")
-    print("  - RMS контур (зелёный) должен охватывать ~68% энергии пучка")
+    plt.savefig(filename, dpi=150)
+    print("\n* Plot saved to {0}".format(filename))
 
     return fig
 
 
 if __name__ == "__main__":
     print("\n" + "="*70)
-    print("  РАСШИРЕННАЯ ВАЛИДАЦИЯ ВЫЧИСЛЕНИЙ ЦЕНТРОИДА И RMS  ".center(70))
+    print("  EXTENDED VALIDATION OF CENTROID AND RMS CALCULATIONS  ".center(70))
     print("="*70)
 
     try:
-        # Запускаем все тесты
-        test_gaussian_centered()
-        test_gaussian_offset()
-        test_gaussian_elliptical()
+        # Run all tests
+        print("\n>>> Running Test 1: Centered Gaussian")
+        image1, cx1, cy1, rx1, ry1, sigma1, psize1 = test_gaussian_centered()
 
-        # Визуализация
+        print("\n>>> Running Test 2: Offset Gaussian")
+        image2, cx2, cy2, rx2, ry2, sigma2, psize2, ox2, oy2 = test_gaussian_offset()
+
+        print("\n>>> Running Test 3: Elliptical Gaussian")
+        image3, cx3, cy3, rx3, ry3, sx3, sy3, psize3 = test_gaussian_elliptical()
+
+        # Visualization
+        print("\n" + "="*70)
+        print("Creating visualizations...")
+        print("="*70)
+
         try:
-            visualize_gaussian_test()
+            # Visualize Test 1
+            visualize_test(
+                image1, cx1, cy1, rx1, ry1,
+                0.0, 0.0, sigma1 * psize1, sigma1 * psize1,
+                psize1,
+                "Test 1: Centered Gaussian Distribution",
+                'd:/DEV/CANDLE/Beam-Profile-Analyzer/gaussian_test1_centered.png'
+            )
+
+            # Visualize Test 2
+            visualize_test(
+                image2, cx2, cy2, rx2, ry2,
+                ox2 * psize2, oy2 * psize2, sigma2 * psize2, sigma2 * psize2,
+                psize2,
+                "Test 2: Offset Gaussian Distribution",
+                'd:/DEV/CANDLE/Beam-Profile-Analyzer/gaussian_test2_offset.png'
+            )
+
+            # Visualize Test 3
+            visualize_test(
+                image3, cx3, cy3, rx3, ry3,
+                0.0, 0.0, sx3 * psize3, sy3 * psize3,
+                psize3,
+                "Test 3: Elliptical Gaussian Distribution",
+                'd:/DEV/CANDLE/Beam-Profile-Analyzer/gaussian_test3_elliptical.png'
+            )
+
+            print("\nVisual verification:")
+            print("  - Centroid should be at the distribution center (cyan lines)")
+            print("  - RMS contour (green) should encompass ~68% of beam energy")
+
         except ImportError:
-            print("\n⚠ matplotlib не установлен - визуализация пропущена")
-            print("  Установите: pip install matplotlib")
+            print("\n! matplotlib is not installed - visualization skipped")
+            print("  Install with: pip install matplotlib")
 
         print("\n" + "="*70)
-        print("  ✓✓✓ ВСЕ ТЕСТЫ ПРОЙДЕНЫ УСПЕШНО! ✓✓✓  ".center(70))
-        print("  Вычисления центроида и RMS полностью корректны  ".center(70))
-        print("  и соответствуют теоретическим значениям!  ".center(70))
+        print("  *** ALL TESTS PASSED SUCCESSFULLY! ***  ".center(70))
+        print("  Centroid and RMS calculations are fully correct  ".center(70))
+        print("  and match theoretical values!  ".center(70))
         print("="*70)
 
     except AssertionError as e:
-        print(f"\n✗ ОШИБКА: {e}")
-        print("\nПроверьте реализацию вычислений!")
+        print("\n* ERROR: {0}".format(e))
+        print("\nCheck the implementation of calculations!")
         raise
