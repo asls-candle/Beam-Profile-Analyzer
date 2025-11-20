@@ -58,9 +58,9 @@ class DataExporter:
                         # Записываем только числа без заголовков
                         if value.ndim == 2:  # Для двумерных массивов
                             for row in value:
-                                writer.writerow(["{:.7f}".format(x) for x in row])
+                                writer.writerow(["{:.17g}".format(x) for x in row])
                         else:  # Для других размерностей
-                            writer.writerow(["{:.7f}".format(x) for x in value.flatten()])
+                            writer.writerow(["{:.17g}".format(x) for x in value.flatten()])
 
             print("Экспортированы данные в папку {}: метаданные и массивы в отдельных CSV файлах.".format(folder_path))
             return True

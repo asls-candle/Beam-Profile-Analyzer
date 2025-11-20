@@ -78,10 +78,10 @@ class ImageAnalyzer:
         # Применяем ROI если задан
         processed_image = self.apply_roi(image)
 
-        # Создаем координатную сетку (в пикселях)
+        # Создаем координатную сетку (в пикселях), центрированную относительно 0
         y_size, x_size = processed_image.shape
-        x_grid = np.arange(x_size)
-        y_grid = np.arange(y_size)
+        x_grid = np.arange(x_size) - (x_size - 1) / 2
+        y_grid = np.arange(y_size) - (y_size - 1) / 2
 
         # Проекция на оси X и Y (сумма интенсивности по соответствующим осям)
         x_proj = np.sum(processed_image, axis=0)
