@@ -34,3 +34,30 @@ def plot_negative_density(matrix, output_dir, output_filename):
     # Сохраняем график в файл
     plt.savefig(output_file)
     plt.close()
+
+
+def evaluate_zeros_in_shot(matrix):
+    """
+    Оценивает количество нулевых значений в матрице shot при импорте из MATLAB
+
+    Args:
+        matrix: Матрица данных для анализа (обычно shot из MATLAB)
+
+    Returns:
+        dict: Словарь со статистикой нулевых значений
+    """
+    # Подсчитываем количество нулевых элементов
+    zero_count = np.sum(matrix == 0)
+    total_count = matrix.size
+    zero_percentage = 100.0 * zero_count / total_count if total_count > 0 else 0.0
+
+    logger.info("Количество нулевых значений в shot при импорте из MATLAB: {} из {} ({:.2f}%)".format(
+        zero_count, total_count, zero_percentage
+        )
+    )
+
+    return {
+        'zero_count': zero_count,
+        'total_count': total_count,
+        'zero_percentage': zero_percentage
+    }

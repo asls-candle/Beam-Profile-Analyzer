@@ -4,7 +4,7 @@ import re
 import scipy.io as sio
 import pandas as pd
 import json
-from src.negative_numbers_evaluation import plot_negative_density
+from src.negative_numbers_evaluation import plot_negative_density, evaluate_zeros_in_shot
 
 from src.analysis.normalizer import ImageNormalizer
 
@@ -59,6 +59,9 @@ class DataImporter:
             # Получаем данные снимка
             logger.debug("Получение данных снимка с использованием переменной: {}".format(shot_var_name))
             shot = shot_data[shot_var_name]
+
+            # Оцениваем количество нулей в shot при импорте из MATLAB
+            evaluate_zeros_in_shot(shot)
 
             # Если путь к файлу с фоном не указан, пытаемся найти его автоматически
             if background_filepath is None:
@@ -117,7 +120,7 @@ class DataImporter:
                     difference = normalized_shot - normalized_background
                     plot_negative_density(difference, "negative_density", "negative_density.png")
                     # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
-                    # difference[difference < 0] = 0
+                    difference[difference < 0] = 0
                     # Применяем медианный фильтр к разностному изображению
                     # difference = apply_median_filter(difference, kernel_size=3)
                 else:
