@@ -6,6 +6,42 @@
 import numpy as np
 from src.analysis.image_analyzer import ImageAnalyzer
 
+
+def test_centroid_and_rms_42():
+    """Test centroid and RMS calculation for a simple symmetric 5x5 distribution."""
+
+    analyzer = ImageAnalyzer()
+
+    # Create a simple 5x5 vertical stripe distribution
+    image = np.array([
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0]
+    ], dtype=float)
+
+    pixel_size = 1  # mm
+
+    # Compute centroid
+    centroid_x, centroid_y = analyzer.calculate_centroid(image, pixel_size, pixel_size)
+
+    # Compute RMS
+    rms_x, rms_y = analyzer.calculate_rms(image, pixel_size, pixel_size)
+
+    print("=== Test: 5x5 Distribution ===")
+    print(f"Image shape: {image.shape}")
+    print(f"Pixel size: {pixel_size} mm")
+
+    print("\nCentroid:")
+    print(f"  X: {centroid_x:.17f} mm")
+    print(f"  Y: {centroid_y:.17f} mm")
+
+    print("\nRMS:")
+    print(f"  X: {rms_x:.17f} mm")
+    print(f"  Y: {rms_y:.17f} mm")
+
+
 def test_centroid_and_rms():
     """Тест расчёта центроида и RMS для простого симметричного распределения"""
 
@@ -67,8 +103,8 @@ def test_centroid_offset():
     print(f"Пик в пикселе [5, 7]")
     print(f"Координата в центрированной системе: x = 7 - (10-1)/2 = {7 - (10-1)/2}")
     print(f"\nЦентроид:")
-    print(f"  X: {centroid_x:.6f} мм (должен быть положительным)")
-    print(f"  Y: {centroid_y:.6f} мм (должен быть ~0)")
+    print(f"  X: {centroid_x:.17f} мм (должен быть положительным)")
+    print(f"  Y: {centroid_y:.17f} мм (должен быть ~0)")
 
     # Центроид X должен быть положительным (пик справа от центра)
     assert centroid_x > 1.0, f"Центроид X должен быть > 1.0, получено {centroid_x}"
@@ -110,11 +146,12 @@ def test_coordinate_system():
     print("\n[OK] Test passed!")
 
 if __name__ == "__main__":
-    test_coordinate_system()
-    test_centroid_and_rms()
-    test_centroid_offset()
+    test_centroid_and_rms_42()
+    # test_coordinate_system()
+    # test_centroid_and_rms()
+    # test_centroid_offset()
 
-    print("\n" + "="*50)
-    print("Все тесты успешно пройдены!")
-    print("Вычисления центроида и RMS корректны")
-    print("="*50)
+    # print("\n" + "="*50)
+    # print("Все тесты успешно пройдены!")
+    # print("Вычисления центроида и RMS корректны")
+    # print("="*50)

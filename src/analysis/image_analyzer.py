@@ -163,6 +163,58 @@ class ImageAnalyzer:
 
         return centroid_x, centroid_y
 
+    def calculate_centroid_unnormalized(self, image, pixel_size_x, pixel_size_y):
+        """
+        Рассчитывает координаты центроида изображения в центрированной системе координат
+        используя НЕ нормализованные значения интенсивности
+
+        Метод аналогичен calculate_centroid, но использует исходные значения интенсивности
+        без нормализации на максимум.
+
+        Args:
+            image: Двумерный массив значений светимости
+            pixel_size_x: Размер пикселя по оси X (мм)
+            pixel_size_y: Размер пикселя по оси Y (мм)
+
+        Returns:
+            (centroid_x, centroid_y): Координаты центроида (мм) в центрированной системе координат
+        """
+        if image is None or image.size == 0:
+            return 0, 0
+
+        # Применяем ROI если задан
+        processed_image = self.apply_roi(image)
+
+        # Получаем размеры изображения
+        y_size, x_size = processed_image.shape
+
+        # Создаем координаты, центрированные относительно 0
+        x_coords = np.arange(x_size) - (x_size - 1) / 2
+        y_coords = np.arange(y_size) - (y_size - 1) / 2
+
+        # Вычисляем проекции (суммы интенсивности по осям)
+        # НЕ НОРМАЛИЗУЕМ - используем исходные значения
+        x_proj = np.sum(processed_image, axis=0)
+        y_proj = np.sum(processed_image, axis=1)
+
+        # Избегаем деления на ноль
+        x_sum = np.sum(x_proj)
+        y_sum = np.sum(y_proj)
+
+        if x_sum == 0 or y_sum == 0:
+            return 0, 0
+
+        # Вычисляем взвешенное среднее положение (центроид) в пикселях
+        # используя НЕ нормализованные проекции
+        centroid_x_px = np.sum(x_coords * x_proj) / x_sum
+        centroid_y_px = np.sum(y_coords * y_proj) / y_sum
+
+        # Преобразование в милиметры
+        centroid_x = centroid_x_px * pixel_size_x
+        centroid_y = centroid_y_px * pixel_size_y
+
+        return centroid_x, centroid_y
+
     def calculate_rms(self, image, pixel_size_x, pixel_size_y):
         """
         Рассчитывает RMS (Root Mean Square) отклонения пучка по осям X и Y
@@ -279,3 +331,35 @@ class ImageAnalyzer:
             # В случае ошибки аппроксимации возвращаем начальное приближение
             fitted_curve = self.gaussian(coords, a_init, mu_init, sigma_init)
             return (a_init, mu_init, sigma_init), fitted_curve
+
+    @staticmethod
+    def denormalize(normalized_data, max_value):
+        """
+        Денормализует матрицу интенсивностей, приводя её к изначальному виду
+
+        Эта функция выполняет обратную операцию нормализации, которая была
+        произведена делением на максимальное значение.
+
+        Args:
+            normalized_data: Нормализованная матрица/массив интенсивностей
+                           (значения от 0 до 1)
+            max_value: Максимальное значение интенсивности до нормализации
+                      (используется как множитель для восстановления)
+
+        Returns:
+            Денормализованная матрица с исходными значениями интенсивности
+
+        Example:
+            >>> # Нормализация
+            >>> original = np.array([100, 200, 300, 400])
+            >>> normalized = original / np.max(original)  # [0.25, 0.5, 0.75, 1.0]
+            >>> # Денормализация
+            >>> restored = ImageAnalyzer.denormalize(normalized, 400)  # [100, 200, 300, 400]
+        """
+        if normalized_data is None:
+            return None
+
+        if max_value == 0:
+            return normalized_data
+
+        return normalized_data * max_value
