@@ -4,12 +4,52 @@ import re
 import scipy.io as sio
 import pandas as pd
 import json
-from src.negative_numbers_evaluation import plot_negative_density, evaluate_zeros_in_shot
+from typing import Dict, Tuple, Optional, List, Any
 
+from src.negative_numbers_evaluation import plot_negative_density, evaluate_zeros_in_shot
 from src.analysis.normalizer import ImageNormalizer
 
 import logging
 logger = logging.getLogger('data')
+
+
+# Константы для имен файлов и конфигурации
+class ImporterConfig:
+    """Конфигурация импортера данных"""
+
+    # Имена CSV файлов
+    FILENAME_SHOT = 'shot.csv'
+    FILENAME_BACKGROUND = 'background.csv'
+    FILENAME_DIFFERENCE = 'difference.csv'
+    FILENAME_RAW_SHOT = 'raw_shot.csv'
+    FILENAME_RAW_BACKGROUND = 'raw_background.csv'
+    FILENAME_METADATA = 'metadata.json'
+
+    # Суффиксы для поиска фоновых файлов
+    BACKGROUND_SUFFIXES = ['_bg', '_background']
+
+    # Информация о камерах
+    CAMERAS = {
+        "GUN_YAG1": {
+            "resolution": (1032, 776),
+            "pixel_size_x": 0.02840909,
+            "pixel_size_y": 0.02840909,
+            "name": "GUN_YAG1"
+        },
+        "GUN_YAG2": {
+            "resolution": (1624, 1224),
+            "pixel_size_x": 0.01875468,
+            "pixel_size_y": 0.01875468,
+            "name": "GUN_YAG2"
+        }
+    }
+
+    # Камера по умолчанию
+    DEFAULT_CAMERA = {
+        "pixel_size_x": 1.0,
+        "pixel_size_y": 1.0,
+        "name": "Неизвестная камера"
+    }
 
 
 # from src.analysis.filters import apply_median_filter
@@ -20,9 +60,241 @@ class DataImporter:
     """
 
     @staticmethod
+    def _validate_array_shape(array, expected_shape=None, array_name="array"):
+        # type: (np.ndarray, Optional[Tuple[int, int]], str) -> bool
+        """
+        Проверяет корректность размера массива
+
+        Args:
+            array: Проверяемый массив
+            expected_shape: Ожидаемая форма (опционально)
+            array_name: Имя массива для логирования
+
+        Returns:
+            bool: True если размер корректен
+        """
+        if array is None:
+            logger.error("Массив {} является None".format(array_name))
+            return False
+
+        if expected_shape is not None and array.shape != expected_shape:
+            logger.error("Размер массива {} ({}) не соответствует ожидаемому ({})".format(
+                array_name, array.shape, expected_shape))
+            return False
+
+        return True
+
+    @staticmethod
+    def _validate_shapes_match(array1, array2, name1="array1", name2="array2"):
+        # type: (np.ndarray, np.ndarray, str, str) -> bool
+        """
+        Проверяет совпадение размеров двух массивов
+
+        Args:
+            array1: Первый массив
+            array2: Второй массив
+            name1: Имя первого массива
+            name2: Имя второго массива
+
+        Returns:
+            bool: True если размеры совпадают
+        """
+        if array1.shape != array2.shape:
+            logger.error("Размеры {} ({}) и {} ({}) не совпадают".format(
+                name1, array1.shape, name2, array2.shape))
+            return False
+        return True
+
+    @staticmethod
+    def _load_csv_with_pandas(csv_path, expected_shape=None):
+        # type: (str, Optional[Tuple[int, int]]) -> Optional[np.ndarray]
+        """
+        Загружает массив из CSV файла используя pandas
+
+        ВАЖНО: CSV файлы содержат сырые значения яркости (8-бит, 0-255)
+
+        Args:
+            csv_path: Путь к CSV файлу
+            expected_shape: Ожидаемая форма массива (опционально)
+
+        Returns:
+            numpy.ndarray или None в случае ошибки
+        """
+        try:
+            if not os.path.exists(csv_path):
+                logger.warning("Файл не найден: {}".format(csv_path))
+                return None
+
+            logger.debug("Загрузка CSV файла: {}".format(csv_path))
+
+            # Используем pandas для быстрого чтения CSV
+            # header=None - нет заголовков, данные начинаются с первой строки
+            df = pd.read_csv(csv_path, header=None, dtype=np.float64)
+
+            # Преобразуем DataFrame в numpy массив
+            data_array = df.values
+
+            # Проверяем, что получили данные
+            if data_array.size == 0:
+                logger.warning("Файл {} не содержит данных".format(csv_path))
+                return None
+
+            # Если указана ожидаемая форма, пытаемся преобразовать
+            if expected_shape is not None:
+                if data_array.shape != expected_shape:
+                    logger.debug("Форма массива {} не соответствует ожидаемой {}. Попытка reshape.".format(
+                        data_array.shape, expected_shape))
+                    try:
+                        data_array = data_array.flatten().reshape(expected_shape)
+                        logger.debug("Успешно преобразован к форме {}".format(expected_shape))
+                    except ValueError as e:
+                        logger.error("Не удалось преобразовать массив к форме {}: {}".format(
+                            expected_shape, e))
+                        return None
+
+            logger.info("Успешно загружен CSV массив из {}, форма: {}, диапазон значений: [{:.2f}, {:.2f}]".format(
+                csv_path, data_array.shape, data_array.min(), data_array.max()))
+
+            return data_array
+
+        except pd.errors.EmptyDataError:
+            logger.error("Файл {} пуст".format(csv_path))
+            return None
+        except pd.errors.ParserError as e:
+            logger.error("Ошибка парсинга CSV файла {}: {}".format(csv_path, e))
+            return None
+        except Exception as e:
+            logger.error("Ошибка при чтении CSV файла {}: {}".format(csv_path, e), exc_info=True)
+            return None
+
+    @staticmethod
+    def _process_image_data(shot, background):
+        # type: (np.ndarray, np.ndarray) -> Dict[str, np.ndarray]
+        """
+        Обрабатывает данные изображения: нормализует и вычитает фон
+
+        Args:
+            shot: Сырой массив снимка (8-бит или нормализованный)
+            background: Сырой массив фона (8-бит или нормализованный)
+
+        Returns:
+            dict: Словарь с обработанными данными (shot, background, difference)
+        """
+        logger.debug("Обработка данных изображения")
+
+        # Проверяем совпадение размеров
+        if not DataImporter._validate_shapes_match(shot, background, "shot", "background"):
+            raise ValueError("Размеры shot и background не совпадают")
+
+        # Нормализуем данные используя ImageNormalizer (как MATLAB im2double)
+        normalized_shot = ImageNormalizer.normalize(shot)
+        normalized_background = ImageNormalizer.normalize(background)
+
+        # Вычитаем нормализованный фон из нормализованного shot
+        difference = normalized_shot - normalized_background
+
+        # Логируем статистику отрицательных значений
+        negative_count = np.sum(difference < 0)
+        negative_percent = 100.0 * negative_count / difference.size
+        logger.info("Количество отрицательных значений в difference: {} из {} ({:.2f}%)".format(
+            negative_count, difference.size, negative_percent))
+
+        # ЗАКОММЕНТИРОВАНО: обнуление отрицательных значений (под вопросом)
+        # difference[difference < 0] = 0
+
+        return {
+            'shot': normalized_shot,
+            'background': normalized_background,
+            'difference': difference
+        }
+
+    @staticmethod
+    def _create_result_dict(shot, background, difference, raw_shot, raw_background,
+                           camera_info, filepath):
+        # type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict[str, Any], str) -> Dict[str, Any]
+        """
+        Формирует результирующий словарь с данными
+
+        Args:
+            shot: Нормализованный снимок
+            background: Нормализованный фон
+            difference: Разностное изображение
+            raw_shot: Сырой снимок
+            raw_background: Сырой фон
+            camera_info: Информация о камере
+            filepath: Путь к файлу
+
+        Returns:
+            dict: Результирующий словарь
+        """
+        return {
+            "shot": shot,
+            "background": background,
+            "difference": difference,
+            "raw_shot": raw_shot,
+            "raw_background": raw_background,
+            "resolution": camera_info.get("resolution", shot.shape),
+            "pixel_size_x": camera_info["pixel_size_x"],
+            "pixel_size_y": camera_info["pixel_size_y"],
+            "camera_name": camera_info["name"],
+            # Добавляем эти поля, чтобы избежать KeyError в UI
+            "current_frame": shot,
+            "centroid": (0, 0),
+            "rms": (0, 0),
+            "filepath": filepath
+        }
+
+    @staticmethod
+    def _load_mat_variable(mat_filepath, var_type="shot"):
+        # type: (str, str) -> Optional[np.ndarray]
+        """
+        Загружает переменную из MAT файла
+
+        Args:
+            mat_filepath: Путь к MAT файлу
+            var_type: Тип переменной для логирования ('shot' или 'background')
+
+        Returns:
+            numpy.ndarray или None в случае ошибки
+        """
+        try:
+            logger.debug("Загрузка {} из MAT файла: {}".format(var_type, mat_filepath))
+            mat_data = sio.loadmat(mat_filepath)
+
+            # Проверяем наличие данных
+            if not mat_data:
+                logger.error("MAT файл {} не содержит данных".format(mat_filepath))
+                return None
+
+            # Получаем имена переменных (исключая системные с "__")
+            var_names = [key for key in mat_data.keys() if not key.startswith("__")]
+
+            if not var_names:
+                logger.error("Не найдено переменных в MAT файле {}".format(mat_filepath))
+                return None
+
+            # Используем первую найденную переменную
+            var_name = var_names[0]
+            logger.debug("Найдены переменные: {}, выбрана: {}".format(var_names, var_name))
+
+            array = mat_data[var_name]
+            logger.info("Загружен {} из MAT, форма: {}, диапазон: [{:.3f}, {:.3f}]".format(
+                var_type, array.shape, array.min(), array.max()))
+
+            return array
+
+        except Exception as e:
+            logger.error("Ошибка при загрузке {} из MAT файла {}: {}".format(
+                var_type, mat_filepath, e))
+            return None
+
+    @staticmethod
     def import_mat(filepath, background_filepath=None):
+        # type: (str, Optional[str]) -> Optional[Dict[str, Any]]
         """
         Импортирует данные из MAT файла
+
+        ВАЖНО: MAT файлы уже содержат нормализованные данные (из MATLAB im2double)
 
         Args:
             filepath: Путь к файлу
@@ -33,77 +305,39 @@ class DataImporter:
         """
         try:
             logger.info("Начало импорта MAT файла: {}".format(filepath))
+
             # Загружаем основной файл
-            logger.debug("Загрузка данных из основного файла: {}".format(filepath))
-            shot_data = sio.loadmat(filepath)
-
-            # Проверяем наличие данных в файле
-            if not shot_data:
-                print("Файл {} не содержит данных".format(filepath))
-                logger.error("Файл {} не содержит данных".format(filepath))
-                return None
-            logger.debug("Variavle names: {}".format(shot_data.keys()))
-            # Получаем имя переменной с данными (обычно первая переменная, не начинающаяся с "__")
-            logger.debug("Поиск переменных с данными в файле")
-            shot_var_names = [key for key in shot_data.keys() if not key.startswith("__")]
-
-            if not shot_var_names:
-                print("Не удалось найти данные в файле {}".format(filepath))
-                logger.error("Не удалось найти данные в файле {}".format(filepath))
+            shot = DataImporter._load_mat_variable(filepath, "shot")
+            if shot is None:
+                print("Не удалось загрузить данные из файла {}".format(filepath))
                 return None
 
-            # Извлекаем первую переменную, которая не начинается с "__"
-            shot_var_name = shot_var_names[0]
-            logger.debug("Найдены переменные в файле: {}, выбрана первая: {}".format(shot_var_names, shot_var_name))
-
-            # Получаем данные снимка
-            logger.debug("Получение данных снимка с использованием переменной: {}".format(shot_var_name))
-            shot = shot_data[shot_var_name]
-
-            # Оцениваем количество нулей в shot при импорте из MATLAB
+            # Оцениваем количество нулей (диагностика)
             evaluate_zeros_in_shot(shot)
 
-            # Если путь к файлу с фоном не указан, пытаемся найти его автоматически
+            # Ищем файл с фоном если не указан
             if background_filepath is None:
-                logger.info("Путь к файлу с фоном не указан, выполняется автоматический поиск")
+                logger.info("Автоматический поиск файла с фоном")
                 background_filepath = DataImporter._find_background_file(filepath)
 
-            # Если файл с фоном не найден
             if background_filepath is None:
-                # Выводим сообщение один раз, а не в каждой итерации поиска файла
                 print("Файл с фоном для {} не найден".format(filepath))
-                logger.error("Файл с фоном для {} не найден".format(filepath))
+                logger.error("Файл с фоном не найден")
                 return None
 
             # Загружаем файл с фоном
-            logger.debug("Загрузка файла с фоном: {}".format(background_filepath))
-            bg_data = sio.loadmat(background_filepath)
-
-            # Получаем имя переменной с данными фона
-            logger.debug("Поиск переменных с данными фона в файле")
-            bg_var_names = [key for key in bg_data.keys() if not key.startswith("__")]
-
-            if not bg_var_names:
-                print("Не удалось найти данные в файле {}".format(background_filepath))
-                logger.error("Не удалось найти данные в файле {}".format(background_filepath))
+            background = DataImporter._load_mat_variable(background_filepath, "background")
+            if background is None:
+                print("Не удалось загрузить фон из файла {}".format(background_filepath))
                 return None
 
-            # Извлекаем первую переменную фона, которая не начинается с "__"
-            bg_var_name = bg_var_names[0]
-            logger.debug("Найдены переменные в файле фона: {}, выбрана первая: {}".format(bg_var_names, bg_var_name))
-
-            # Получаем данные фона
-            logger.debug("Получение данных фона с использованием переменной: {}".format(bg_var_name))
-            background = bg_data[bg_var_name]
-
-            # Проверяем совпадение размеров
-            if shot.shape != background.shape:
-                print("Размеры снимка ({}) и фона ({}) не совпадают".format(shot.shape, background.shape))
-                logger.error("Размеры снимка ({}) и фона ({}) не совпадают".format(shot.shape, background.shape))
+            # Валидация размеров
+            if not DataImporter._validate_shapes_match(shot, background, "shot", "background"):
+                print("Размеры снимка ({}) и фона ({}) не совпадают".format(
+                    shot.shape, background.shape))
                 return None
 
-            # Определяем камеру по размеру массива
-            logger.debug("Определение камеры по размеру массива: {}".format(shot.shape))
+            # Определяем камеру по размеру
             camera_info = DataImporter._determine_camera_by_shape(shot.shape)
             logger.info("Определена камера: {}".format(camera_info['name']))
 
@@ -112,42 +346,33 @@ class DataImporter:
             normalized_shot = shot
             normalized_background = background
 
-            # Вычитаем фон если он есть
-            if background is not None:
-                # Проверяем совпадение размеров
-                if shot.shape == background.shape:
-                    # Вычитаем нормализованный фон из нормализованного shot
-                    difference = normalized_shot - normalized_background
-                    plot_negative_density(difference, "negative_density", "negative_density.png")
-                    # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
-                    difference[difference < 0] = 0
-                    # Применяем медианный фильтр к разностному изображению
-                    # difference = apply_median_filter(difference, kernel_size=3)
-                else:
-                    print("Размеры снимка и фона не совпадают")
-                    difference = None
+            # Вычитаем фон
+            difference = normalized_shot - normalized_background
 
-            # Формируем результирующий словарь
-            logger.debug("Формирование результирующего словаря с данными")
-            result = {
-                "shot": normalized_shot,
-                "background": normalized_background,
-                "difference": difference,
-                "raw_shot": shot,
-                "raw_background": background,
-                "resolution": camera_info["resolution"],
-                "pixel_size_x": camera_info["pixel_size_x"],
-                "pixel_size_y": camera_info["pixel_size_y"],
-                "camera_name": camera_info["name"],
-                # Добавляем эти поля, чтобы избежать KeyError в UI
-                "current_frame": normalized_shot,
-                "centroid": (0, 0),
-                "rms": (0, 0),
-                "filepath": filepath
-            }
+            # Диагностика отрицательных значений
+            plot_negative_density(difference, "negative_density", "negative_density.png")
+            negative_count = np.sum(difference < 0)
+            negative_percent = 100.0 * negative_count / difference.size
+            logger.info("Отрицательных значений в difference: {} ({:.2f}%)".format(
+                negative_count, negative_percent))
+
+            # ЗАКОММЕНТИРОВАНО: обнуление отрицательных значений (под вопросом)
+            difference[difference < 0] = 0
+
+            # Формируем результат используя общий метод
+            result = DataImporter._create_result_dict(
+                shot=normalized_shot,
+                background=normalized_background,
+                difference=difference,
+                raw_shot=shot,
+                raw_background=background,
+                camera_info=camera_info,
+                filepath=filepath
+            )
 
             logger.info("Успешно импортирован MAT файл: {}".format(filepath))
             return result
+
         except Exception as e:
             print("Ошибка при импорте MAT файла: {}".format(e))
             logger.error("Ошибка при импорте MAT файла: {}".format(e), exc_info=True)
@@ -156,6 +381,7 @@ class DataImporter:
 
     @staticmethod
     def _find_background_file(filepath):
+        # type: (str) -> Optional[str]
         """
         Находит соответствующий файл с фоном
 
@@ -246,6 +472,7 @@ class DataImporter:
 
     @staticmethod
     def _determine_camera_by_shape(shape):
+        # type: (Tuple[int, int]) -> Dict[str, Any]
         """
         Определяет камеру по размеру массива
 
@@ -256,39 +483,24 @@ class DataImporter:
             dict: Информация о камере
         """
         logger.debug("Определение камеры по размеру массива: {}".format(shape))
-        # Информация о известных камерах
-        cameras = {
-            "GUN_YAG1": {
-                "resolution": (1032, 776),
-                "pixel_size_x": 0.02840909,
-                "pixel_size_y": 0.02840909,
-                "name": "GUN_YAG1"
-            },
-            "GUN_YAG2": {
-                "resolution": (1624, 1224),
-                "pixel_size_x": 0.01875468,
-                "pixel_size_y": 0.01875468,
-                "name": "GUN_YAG2"
-            }
-        }
 
-        # Проверяем соответствие размеров
-        for camera_name, info in cameras.items():
-            if shape == info["resolution"] or shape == (info["resolution"][1], info["resolution"][0]):
+        # Проверяем соответствие размеров с известными камерами
+        for camera_name, info in ImporterConfig.CAMERAS.items():
+            resolution = info["resolution"]
+            # Проверяем прямое и обратное совпадение (на случай транспонированных данных)
+            if shape == resolution or shape == (resolution[1], resolution[0]):
                 logger.debug("Определена известная камера: {}".format(camera_name))
                 return info
 
         # Если не нашли соответствие, возвращаем значения по умолчанию
         logger.warning("Не удалось определить камеру по размеру {}. Используются значения по умолчанию.".format(shape))
-        return {
-            "resolution": shape,
-            "pixel_size_x": 1.0,
-            "pixel_size_y": 1.0,
-            "name": "Неизвестная камера"
-        }
+        default_camera = ImporterConfig.DEFAULT_CAMERA.copy()
+        default_camera["resolution"] = shape
+        return default_camera
 
     @staticmethod
     def is_data_folder(path):
+        # type: (str) -> bool
         """
         Проверяет, является ли указанный путь папкой с данными анализатора профиля пучка
 
@@ -298,8 +510,8 @@ class DataImporter:
         Returns:
             bool: True если это папка с данными, иначе False
         """
-        # Если путь указывает на файл, проверяем его папку
-        if os.path.isfile(path) and os.path.basename(path) == 'metadata.json':
+        # Если путь указывает на файл metadata.json, проверяем его папку
+        if os.path.isfile(path) and os.path.basename(path) == ImporterConfig.FILENAME_METADATA:
             path = os.path.dirname(path)
 
         # Проверяем, является ли путь папкой
@@ -307,22 +519,30 @@ class DataImporter:
             return False
 
         # Проверяем наличие метаданных
-        metadata_path = os.path.join(path, 'metadata.json')
+        metadata_path = os.path.join(path, ImporterConfig.FILENAME_METADATA)
         if not os.path.isfile(metadata_path):
             return False
 
         # Проверяем наличие хотя бы одного из основных CSV файлов
-        expected_files = ['shot.csv', 'background.csv', 'difference.csv']
-        found = False
+        # Поддерживаем как обработанные (shot, background, difference),
+        # так и сырые данные (raw_shot, raw_background)
+        expected_files = [
+            ImporterConfig.FILENAME_SHOT,
+            ImporterConfig.FILENAME_BACKGROUND,
+            ImporterConfig.FILENAME_DIFFERENCE,
+            ImporterConfig.FILENAME_RAW_SHOT,
+            ImporterConfig.FILENAME_RAW_BACKGROUND
+        ]
+
         for filename in expected_files:
             if os.path.isfile(os.path.join(path, filename)):
-                found = True
-                break
+                return True
 
-        return found
+        return False
 
     @staticmethod
     def import_folder(folder_path):
+        # type: (str) -> Optional[Dict[str, Any]]
         """
         Импортирует данные из папки с метаданными и CSV файлами
 
@@ -333,7 +553,7 @@ class DataImporter:
             dict: Словарь с импортированными данными или None в случае ошибки
         """
         # Если путь указывает на файл metadata.json, берем его директорию
-        if os.path.isfile(folder_path) and os.path.basename(folder_path) == 'metadata.json':
+        if os.path.isfile(folder_path) and os.path.basename(folder_path) == ImporterConfig.FILENAME_METADATA:
             metadata_filepath = folder_path
             folder_path = os.path.dirname(folder_path)
         else:
@@ -343,102 +563,89 @@ class DataImporter:
                 logger.error("Указанный путь не является папкой с данными: {}".format(folder_path))
                 return None
 
-            metadata_filepath = os.path.join(folder_path, 'metadata.json')
+            metadata_filepath = os.path.join(folder_path, ImporterConfig.FILENAME_METADATA)
 
         return DataImporter.import_multifile_csv(metadata_filepath)
 
     @staticmethod
-    def _load_csv_array(array_path, expected_shape=None):
+    def _load_metadata(metadata_filepath):
+        # type: (str) -> Optional[Dict[str, Any]]
         """
-        Загружает массив из CSV файла
+        Загружает метаданные из JSON файла
 
         Args:
-            array_path: Путь к CSV файлу
-            expected_shape: Ожидаемая форма массива (опционально)
+            metadata_filepath: Путь к JSON файлу с метаданными
 
         Returns:
-            numpy.ndarray или None в случае ошибки
+            dict: Метаданные или None в случае ошибки
         """
         try:
-            # Читаем файл построчно
-            with open(array_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-
-            # Убираем пустые строки
-            data_rows = [line.strip() for line in lines if line.strip()]
-
-            if not data_rows:
-                logger.warning("Файл {} пуст".format(array_path))
+            if not os.path.exists(metadata_filepath):
+                logger.error("Файл метаданных не найден: {}".format(metadata_filepath))
                 return None
 
-            # Преобразуем строки в numpy массив
-            try:
-                # Пытаемся разделить по запятой (CSV)
-                data_array = np.array([[float(val) for val in row.split(',')]
-                                    for row in data_rows])
-            except ValueError:
-                # Если не получилось, пробуем по пробелам
-                try:
-                    data_array = np.array([[float(val) for val in row.split()]
-                                        for row in data_rows])
-                except Exception as e:
-                    logger.error("Не удалось разобрать данные в файле {}: {}".format(array_path, e))
-                    return None
+            with open(metadata_filepath, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
 
-            # Если указана ожидаемая форма и текущая форма не соответствует, пробуем изменить
-            if expected_shape and data_array.shape != expected_shape:
-                try:
-                    data_array = data_array.flatten().reshape(expected_shape)
-                except Exception as e:
-                    logger.warning("Не удалось преобразовать массив к форме {}: {}".format(expected_shape, e))
+            logger.debug("Метаданные успешно загружены из {}".format(metadata_filepath))
+            return metadata
 
-            logger.info("Успешно загружен массив из {}, форма: {}".format(array_path, data_array.shape))
-            return data_array
-
+        except json.JSONDecodeError as e:
+            logger.error("Ошибка парсинга JSON файла {}: {}".format(metadata_filepath, e))
+            return None
         except Exception as e:
-            logger.error("Ошибка при чтении файла {}: {}".format(array_path, e))
+            logger.error("Ошибка при чтении метаданных {}: {}".format(metadata_filepath, e))
             return None
 
     @staticmethod
-    def _compute_processed_data(raw_shot, raw_background):
+    def _load_csv_arrays(folder_path, arrays_info):
+        # type: (str, Dict[str, Any]) -> Dict[str, np.ndarray]
         """
-        Вычисляет обработанные данные из сырых массивов
-        Использует ImageNormalizer для нормализации (как MATLAB im2double)
+        Загружает все CSV массивы из папки согласно метаданным
 
         Args:
-            raw_shot: Сырой массив снимка
-            raw_background: Сырой массив фона
+            folder_path: Путь к папке с CSV файлами
+            arrays_info: Информация о массивах из метаданных
 
         Returns:
-            dict: Словарь с обработанными данными (shot, background, difference)
+            dict: Словарь загруженных массивов
         """
-        # Нормализуем shot и background используя ImageNormalizer (как im2double)
-        shot = ImageNormalizer.normalize(raw_shot)
-        background = ImageNormalizer.normalize(raw_background)
+        loaded_arrays = {}
 
-        # Вычитаем нормализованный фон из нормализованного shot (как в MATLAB)
-        difference = shot - background
-        # Логируем количество отрицательных значений
-        negative_count = np.sum(difference < 0)
-        logger.info("Количество отрицательных значений в difference после вычитания фона: {} из {} ({:.2f}%)".format(
-            negative_count, difference.size, 100.0 * negative_count / difference.size))
-        # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
-        # difference[difference < 0] = 0
+        for array_name in arrays_info.keys():
+            csv_filename = "{}.csv".format(array_name)
+            csv_path = os.path.join(folder_path, csv_filename)
 
-        return {
-            'shot': shot,
-            'background': background,
-            'difference': difference
-        }
+            if not os.path.exists(csv_path):
+                logger.warning("Файл массива не найден: {}".format(csv_path))
+                continue
+
+            # Получаем ожидаемую форму из метаданных
+            expected_shape = None
+            if 'shape' in arrays_info[array_name]:
+                shape_data = arrays_info[array_name]['shape']
+                if isinstance(shape_data, list):
+                    expected_shape = tuple(shape_data)
+
+            # Загружаем массив используя pandas
+            array_data = DataImporter._load_csv_with_pandas(csv_path, expected_shape)
+            if array_data is not None:
+                loaded_arrays[array_name] = array_data
+
+        logger.info("Загружено {} массивов из {}".format(len(loaded_arrays), len(arrays_info)))
+        return loaded_arrays
 
     @staticmethod
     def import_multifile_csv(metadata_filepath):
+        # type: (str) -> Optional[Dict[str, Any]]
         """
         Импортирует данные из набора файлов в папке: JSON метаданные и чистые CSV файлы для массивов
 
         Поддерживает два варианта данных:
         1. Полные данные: shot.csv, background.csv, difference.csv, raw_shot.csv, raw_background.csv
         2. Неполные данные: только raw_shot.csv и raw_background.csv (обработанные вычисляются автоматически)
+
+        ВАЖНО: CSV файлы содержат сырые значения яркости (8-бит, 0-255)
 
         Args:
             metadata_filepath: Путь к JSON файлу с метаданными
@@ -449,52 +656,32 @@ class DataImporter:
         try:
             logger.info("Начало импорта данных из папки: {}".format(metadata_filepath))
 
-            if not os.path.exists(metadata_filepath):
-                print("Файл метаданных не найден: {}".format(metadata_filepath))
-                logger.error("Файл метаданных не найден: {}".format(metadata_filepath))
+            # Загружаем метаданные
+            metadata = DataImporter._load_metadata(metadata_filepath)
+            if metadata is None:
+                print("Не удалось загрузить метаданные: {}".format(metadata_filepath))
                 return None
 
-            # Загружаем метаданные из JSON
-            with open(metadata_filepath, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-
-            # Определяем папку, в которой находятся файлы
+            # Определяем папку с файлами
             folder_path = os.path.dirname(metadata_filepath)
 
-            # Определяем, какие массивы нужно загрузить из метаданных
+            # Загружаем все CSV массивы
             arrays_info = metadata.get('arrays', {})
-            available_arrays = list(arrays_info.keys())
+            logger.info("Доступные массивы по метаданным: {}".format(list(arrays_info.keys())))
 
-            logger.info("Доступные массивы по метаданным: {}".format(available_arrays))
+            loaded_arrays = DataImporter._load_csv_arrays(folder_path, arrays_info)
 
-            # Загружаем все доступные массивы
-            loaded_arrays = {}
-            for array_name in available_arrays:
-                array_path = os.path.join(folder_path, "{}.csv".format(array_name))
+            if not loaded_arrays:
+                logger.error("Не удалось загрузить ни одного массива")
+                return None
 
-                if not os.path.exists(array_path):
-                    logger.warning("Файл массива не найден: {}".format(array_path))
-                    continue
-
-                # Получаем ожидаемую форму из метаданных
-                expected_shape = None
-                if 'shape' in arrays_info[array_name]:
-                    shape_data = arrays_info[array_name]['shape']
-                    if isinstance(shape_data, list):
-                        expected_shape = tuple(shape_data)
-
-                # Загружаем массив
-                array_data = DataImporter._load_csv_array(array_path, expected_shape)
-                if array_data is not None:
-                    loaded_arrays[array_name] = array_data
-
-            # Определяем, какой набор данных у нас есть
+            # Определяем тип данных (полные или только сырые)
             has_full_data = ('shot' in loaded_arrays and 'background' in loaded_arrays)
             has_raw_data = ('raw_shot' in loaded_arrays and 'raw_background' in loaded_arrays)
 
             logger.info("Проверка наличия данных: полные={}, сырые={}".format(has_full_data, has_raw_data))
 
-            # Подготавливаем результат с метаданными
+            # Подготавливаем базовую структуру результата
             result_data = {
                 'resolution': metadata.get('resolution'),
                 'pixel_size_x': metadata.get('pixel_size_x'),
@@ -503,44 +690,45 @@ class DataImporter:
                 'date': metadata.get('date')
             }
 
+            # Обрабатываем данные в зависимости от их типа
             if has_full_data:
-                # Вариант 1: Есть полные обработанные данные
-                logger.info("Обнаружены полные данные, используем их напрямую")
+                # Вариант 1: Есть полные обработанные данные (уже нормализованные)
+                logger.info("Обнаружены полные нормализованные данные")
 
                 result_data['shot'] = loaded_arrays['shot']
                 result_data['background'] = loaded_arrays['background']
-                result_data['difference'] = loaded_arrays.get('difference')
                 result_data['raw_shot'] = loaded_arrays.get('raw_shot')
                 result_data['raw_background'] = loaded_arrays.get('raw_background')
 
-                # Если нет difference, но есть shot и background, вычисляем
-                if result_data['difference'] is None:
+                # Вычисляем difference если отсутствует
+                if 'difference' in loaded_arrays:
+                    result_data['difference'] = loaded_arrays['difference']
+                else:
                     logger.info("Файл difference.csv не найден, вычисляем разность")
-                    # shot и background уже нормализованы (из CSV), просто вычитаем
-                    raw_diff = result_data['shot'] - result_data['background']
-                    # Логируем количество отрицательных значений
-                    negative_count = np.sum(raw_diff < 0)
-                    logger.info("Количество отрицательных значений в difference после вычитания фона: {} из {} ({:.2f}%)".format(
-                        negative_count, raw_diff.size, 100.0 * negative_count / raw_diff.size))
-                    # ЗАКОММЕНТИРОВАНО: убираем отрицательные значения (под вопросом)
-                    # raw_diff[raw_diff < 0] = 0
-                    result_data['difference'] = raw_diff  # БЕЗ повторной нормализации!
+                    difference = result_data['shot'] - result_data['background']
+
+                    # Логируем статистику отрицательных значений
+                    negative_count = np.sum(difference < 0)
+                    negative_percent = 100.0 * negative_count / difference.size
+                    logger.info("Отрицательных значений: {} из {} ({:.2f}%)".format(
+                        negative_count, difference.size, negative_percent))
+
+                    result_data['difference'] = difference
 
             elif has_raw_data:
-                # Вариант 2: Есть только сырые данные, вычисляем обработанные
-                logger.info("Обнаружены только сырые данные, вычисляем обработанные")
+                # Вариант 2: Есть только сырые данные (8-бит) - нужна нормализация
+                logger.info("Обнаружены только сырые данные, выполняется нормализация")
 
                 raw_shot = loaded_arrays['raw_shot']
                 raw_background = loaded_arrays['raw_background']
 
-                # Проверяем совпадение размеров
-                if raw_shot.shape != raw_background.shape:
-                    logger.error("Размеры raw_shot ({}) и raw_background ({}) не совпадают".format(
-                        raw_shot.shape, raw_background.shape))
+                # Валидация размеров
+                if not DataImporter._validate_shapes_match(raw_shot, raw_background,
+                                                          'raw_shot', 'raw_background'):
                     return None
 
-                # Вычисляем обработанные данные
-                processed = DataImporter._compute_processed_data(raw_shot, raw_background)
+                # Обрабатываем сырые данные (нормализация + вычитание фона)
+                processed = DataImporter._process_image_data(raw_shot, raw_background)
 
                 result_data['raw_shot'] = raw_shot
                 result_data['raw_background'] = raw_background
@@ -549,9 +737,10 @@ class DataImporter:
                 result_data['difference'] = processed['difference']
 
             else:
-                # Нет ни полных, ни сырых данных
-                logger.error("Не найдены необходимые массивы данных. "
+                # Нет необходимых данных
+                logger.error("Не найдены необходимые массивы. "
                            "Требуются либо (shot и background), либо (raw_shot и raw_background)")
+                print("Ошибка: не найдены необходимые данные в папке {}".format(folder_path))
                 return None
 
             # Добавляем дополнительные поля для совместимости с UI
@@ -570,6 +759,7 @@ class DataImporter:
 
     @staticmethod
     def import_data(filepath):
+        # type: (str) -> Optional[Dict[str, Any]]
         """
         Импортирует данные из MAT-файла или папки с данными
 
@@ -591,7 +781,7 @@ class DataImporter:
             return DataImporter.import_folder(filepath)
 
         # Проверяем, указывает ли путь на metadata.json в папке с данными
-        if os.path.isfile(filepath) and os.path.basename(filepath) == "metadata.json":
+        if os.path.isfile(filepath) and os.path.basename(filepath) == ImporterConfig.FILENAME_METADATA:
             print("Импорт данных из метафайла: {}".format(filepath))
             logger.info("Импорт данных из метафайла: {}".format(filepath))
             return DataImporter.import_multifile_csv(filepath)

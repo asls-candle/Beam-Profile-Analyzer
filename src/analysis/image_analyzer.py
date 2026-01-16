@@ -282,6 +282,62 @@ class ImageAnalyzer:
 
         return rms_x, rms_y
 
+    def calculate_rms_unnormalized(self, image, pixel_size_x, pixel_size_y):
+        """
+        Рассчитывает RMS (Root Mean Square) отклонения пучка по осям X и Y
+        в центрированной системе координат используя НЕ нормализованные значения интенсивности
+
+        Метод аналогичен calculate_rms, но использует исходные значения интенсивности
+        без нормализации на максимум.
+
+        Args:
+            image: Двумерный массив значений светимости
+            pixel_size_x: Размер пикселя по оси X (мм)
+            pixel_size_y: Размер пикселя по оси Y (мм)
+
+        Returns:
+            (rms_x, rms_y): RMS отклонения по осям X и Y (мм)
+        """
+        if image is None or image.size == 0:
+            return 0, 0
+
+        # Применяем ROI если задан
+        processed_image = self.apply_roi(image)
+
+        # Получаем размеры изображения
+        y_size, x_size = processed_image.shape
+
+        # Создаем координаты, центрированные относительно 0
+        x_coords = np.arange(x_size) - (x_size - 1) / 2
+        y_coords = np.arange(y_size) - (y_size - 1) / 2
+
+        # Вычисляем проекции (суммы интенсивности по осям)
+        # НЕ НОРМАЛИЗУЕМ - используем исходные значения
+        x_proj = np.sum(processed_image, axis=0)
+        y_proj = np.sum(processed_image, axis=1)
+
+        # Избегаем деления на ноль
+        x_sum = np.sum(x_proj)
+        y_sum = np.sum(y_proj)
+
+        if x_sum == 0 or y_sum == 0:
+            return 0, 0
+
+        # Вычисляем взвешенное среднее положение (центроид) в пикселях
+        # используя НЕ нормализованные проекции
+        centroid_x_px = np.sum(x_coords * x_proj) / x_sum
+        centroid_y_px = np.sum(y_coords * y_proj) / y_sum
+
+        # Вычисляем RMS используя НЕ нормализованные проекции
+        rms_x_px = np.sqrt(np.sum(x_proj * (x_coords - centroid_x_px)**2) / x_sum)
+        rms_y_px = np.sqrt(np.sum(y_proj * (y_coords - centroid_y_px)**2) / y_sum)
+
+        # Преобразование в милиметры
+        rms_x = rms_x_px * pixel_size_x
+        rms_y = rms_y_px * pixel_size_y
+
+        return rms_x, rms_y
+
     @staticmethod
     def gaussian(x, a, mu, sigma):
         """
