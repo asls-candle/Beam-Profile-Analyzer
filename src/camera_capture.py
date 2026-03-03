@@ -20,6 +20,9 @@ import numpy as np
 from pydc1394 import Camera
 from pydc1394.camera2 import Context
 
+
+os.environ['DC1394_V2_STRATEGY'] = '1'
+
 def list_cameras():
     """
     Перечисляет все доступные камеры в системе с детальной информацией.
