@@ -1,9 +1,6 @@
-# src.ui.camera_tab
-
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QComboBox, QRadioButton, QButtonGroup,
-                             QSpinBox, QDoubleSpinBox, QGroupBox, QFrame,
-                             QMessageBox, QGridLayout)
+                             QSpinBox, QGroupBox, QMessageBox)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 
@@ -100,41 +97,14 @@ class CameraTab(QWidget):
 
         # Camera information + pixel size input
         camera_info_panel = QGroupBox("Camera Information")
-        camera_info_panel.setMinimumWidth(160)
+        camera_info_panel.setMinimumWidth(120)
         camera_info_layout = QVBoxLayout(camera_info_panel)
         camera_info_layout.setSpacing(4)
 
         self.camera_name_label = QLabel("Name: -")
         self.camera_resolution_label = QLabel("Resolution: -")
+        self.camera_pixel_size_label = QLabel("Pixel size: -")
 
-        # Pixel size — editable by user since it is not known in advance
-        pixel_x_row = QHBoxLayout()
-        pixel_x_row.addWidget(QLabel("Pixel X (mm):"))
-        self.pixel_size_x_spinbox = QDoubleSpinBox()
-        self.pixel_size_x_spinbox.setDecimals(8)
-        self.pixel_size_x_spinbox.setRange(0.000001, 10.0)
-        self.pixel_size_x_spinbox.setSingleStep(0.001)
-        self.pixel_size_x_spinbox.setValue(0.01)
-        pixel_x_row.addWidget(self.pixel_size_x_spinbox)
-
-        pixel_y_row = QHBoxLayout()
-        pixel_y_row.addWidget(QLabel("Pixel Y (mm):"))
-        self.pixel_size_y_spinbox = QDoubleSpinBox()
-        self.pixel_size_y_spinbox.setDecimals(8)
-        self.pixel_size_y_spinbox.setRange(0.000001, 10.0)
-        self.pixel_size_y_spinbox.setSingleStep(0.001)
-        self.pixel_size_y_spinbox.setValue(0.01)
-        pixel_y_row.addWidget(self.pixel_size_y_spinbox)
-
-        self.apply_pixel_size_btn = QPushButton("Apply pixel size")
-        self.apply_pixel_size_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
-        self.apply_pixel_size_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
-
-        camera_info_layout.addWidget(self.camera_name_label)
-        camera_info_layout.addWidget(self.camera_resolution_label)
-        camera_info_layout.addLayout(pixel_x_row)
-        camera_info_layout.addLayout(pixel_y_row)
-        camera_info_layout.addWidget(self.apply_pixel_size_btn)
 
         # Background collection
         background_panel = QGroupBox("Background Collection")
@@ -222,7 +192,7 @@ class CameraTab(QWidget):
         # Assemble top panel
         top_panel.addWidget(mode_panel, 1)
         top_panel.addWidget(camera_panel, 1)
-        top_panel.addWidget(camera_info_panel, 2)   # wider — contains spinboxes
+        top_panel.addWidget(camera_info_panel, 1)
         top_panel.addWidget(background_panel, 1)
         top_panel.addWidget(capture_panel, 1)
         top_panel.addWidget(status_panel, 1)
@@ -251,8 +221,6 @@ class CameraTab(QWidget):
         self.refresh_cameras_btn.clicked.connect(self.on_refresh_cameras)
         self.launch_camera_btn.clicked.connect(self.on_launch_camera)
         self.stop_camera_btn.clicked.connect(self.on_stop_camera)
-
-        self.apply_pixel_size_btn.clicked.connect(self.on_apply_pixel_size)
 
         self.get_background_btn.clicked.connect(self.on_get_background)
         self.stop_bg_collection_btn.clicked.connect(self.on_stop_bg_collection)
@@ -284,10 +252,6 @@ class CameraTab(QWidget):
             self.launch_camera_btn.setEnabled(not camera_connected)
             self.stop_camera_btn.setEnabled(camera_connected)
 
-            # Pixel size — editable any time, but only meaningful when connected
-            self.pixel_size_x_spinbox.setEnabled(True)
-            self.pixel_size_y_spinbox.setEnabled(True)
-            self.apply_pixel_size_btn.setEnabled(camera_connected)
 
             has_background = self.main_window.image_reader.background is not None
             is_collecting_bg = self.main_window.image_reader.is_collecting_background
@@ -321,9 +285,6 @@ class CameraTab(QWidget):
             self.refresh_cameras_btn.setEnabled(False)
             self.launch_camera_btn.setEnabled(False)
             self.stop_camera_btn.setEnabled(False)
-            self.pixel_size_x_spinbox.setEnabled(False)
-            self.pixel_size_y_spinbox.setEnabled(False)
-            self.apply_pixel_size_btn.setEnabled(False)
             self.bg_frames_spinbox.setEnabled(False)
             self.get_background_btn.setEnabled(False)
             self.stop_bg_collection_btn.setEnabled(False)
@@ -342,6 +303,7 @@ class CameraTab(QWidget):
         if is_camera_mode and not self.main_window.camera_manager.is_connected:
             self.camera_name_label.setText("Name: -")
             self.camera_resolution_label.setText("Resolution: -")
+            self.camera_pixel_size_label.setText("Pixel size: -")
             return
 
         camera_info = self.main_window.get_camera_info()
@@ -351,16 +313,14 @@ class CameraTab(QWidget):
             resolution = camera_info.get("resolution", (0, 0))
             self.camera_resolution_label.setText(
                 "Resolution: {} x {}".format(resolution[0], resolution[1]))
-            # Sync spinboxes with stored value (in case it was changed elsewhere)
-            self.pixel_size_x_spinbox.blockSignals(True)
-            self.pixel_size_y_spinbox.blockSignals(True)
-            self.pixel_size_x_spinbox.setValue(camera_info.get("pixel_size_x", 0.01))
-            self.pixel_size_y_spinbox.setValue(camera_info.get("pixel_size_y", 0.01))
-            self.pixel_size_x_spinbox.blockSignals(False)
-            self.pixel_size_y_spinbox.blockSignals(False)
+            px = camera_info.get("pixel_size_x", 0)
+            py = camera_info.get("pixel_size_y", 0)
+            self.camera_pixel_size_label.setText(
+                "Pixel size: {:.8f} x {:.8f} mm".format(px, py))
         else:
             self.camera_name_label.setText("Name: -")
             self.camera_resolution_label.setText("Resolution: -")
+            self.camera_pixel_size_label.setText("Pixel size: -")
 
     # ── Plot update ───────────────────────────────────────────────────────────
 
@@ -486,12 +446,6 @@ class CameraTab(QWidget):
         if not self.main_window.disconnect_camera():
             QMessageBox.critical(self, "Error", "Failed to disconnect from camera.")
 
-    def on_apply_pixel_size(self):
-        """Write user-entered pixel size into camera_manager and update display."""
-        px = self.pixel_size_x_spinbox.value()
-        py = self.pixel_size_y_spinbox.value()
-        self.main_window.camera_manager.set_pixel_size(px, py)
-        self.update_camera_info()
 
     def on_get_background(self):
         frames_count = self.bg_frames_spinbox.value()

@@ -122,8 +122,8 @@ class CameraManager:
     Менеджер камер с полностью динамическим обнаружением.
 
     Никаких предустановленных камер нет. Имена формируются из
-    vendor/model/GUID как в claude_shot. Размер пикселя задаётся
-    пользователем через set_pixel_size() после подключения.
+    vendor/model/GUID как в claude_shot. Размер пикселя определяется
+    автоматически по разрешению сенсора (PIXEL_SIZE_BY_RESOLUTION).
 
     Для каждой камеры автоматически выбирается максимальное разрешение
     в монохромном 16-битном режиме (FORMAT7_0 → Y16/MONO16).
@@ -136,8 +136,14 @@ class CameraManager:
         "exposure": 0,
     }
 
-    # Размер пикселя по умолчанию (мм) — задаётся пользователем
+    # Размер пикселя по умолчанию (мм)
     DEFAULT_PIXEL_SIZE = 0.01
+
+    # Соответствие разрешения сенсора размеру пикселя (мм)
+    PIXEL_SIZE_BY_RESOLUTION = {
+        (1032, 776):  0.02840909,
+        (1624, 1224): 0.01875468,
+    }
 
     CAPTURE_BUFSIZE = 8
     WARMUP_FRAMES = 5
@@ -220,6 +226,9 @@ class CameraManager:
                 if display_name in self.cameras:
                     display_name = "{} [{}]".format(display_name, i)
 
+                pixel_size = self.PIXEL_SIZE_BY_RESOLUTION.get(
+                    resolution, self.DEFAULT_PIXEL_SIZE)
+
                 self.cameras[display_name] = {
                     "guid": cam_guid,
                     "guid_str": guid_str,
@@ -227,9 +236,8 @@ class CameraManager:
                     "model": model,
                     "camera_name": display_name,
                     "resolution": resolution,
-                    # Размер пикселя неизвестен — пользователь задаст вручную
-                    "pixel_size_x": self.DEFAULT_PIXEL_SIZE,
-                    "pixel_size_y": self.DEFAULT_PIXEL_SIZE,
+                    "pixel_size_x": pixel_size,
+                    "pixel_size_y": pixel_size,
                 }
 
                 logger.info("Обнаружена камера: %s, GUID=%s, разрешение=%s",
@@ -301,32 +309,6 @@ class CameraManager:
             return None
         return self.cameras.get(camera_name)
 
-    def set_pixel_size(self, pixel_size_x, pixel_size_y, camera_name=None):
-        """
-        Устанавливает размер пикселя для камеры.
-
-        Вызывается из UI после того, как пользователь вводит значение.
-
-        Args:
-            pixel_size_x: Размер пикселя по X (мм)
-            pixel_size_y: Размер пикселя по Y (мм)
-            camera_name:  Имя камеры. Если None — текущая подключённая.
-        """
-        if camera_name is None:
-            camera_name = self.camera_name
-        if camera_name is None:
-            return
-
-        if camera_name in self.cameras:
-            self.cameras[camera_name]["pixel_size_x"] = pixel_size_x
-            self.cameras[camera_name]["pixel_size_y"] = pixel_size_y
-            logger.info("Pixel size for %s: %.8f x %.8f mm",
-                        camera_name, pixel_size_x, pixel_size_y)
-
-        # Обновляем и внутренние поля если это текущая камера
-        if camera_name == self.camera_name:
-            self._pixel_size_x = pixel_size_x
-            self._pixel_size_y = pixel_size_y
 
     # ── Подключение / отключение ──────────────────────────────────────────────
 
@@ -375,11 +357,14 @@ class CameraManager:
                 self._height = height
 
                 # Берём pixel_size из словаря (мог быть задан пользователем)
-                self._pixel_size_x = cam_info["pixel_size_x"]
-                self._pixel_size_y = cam_info["pixel_size_y"]
-
-                # Обновляем разрешение в словаре
+                # Обновляем разрешение и пересчитываем pixel_size по реальному разрешению
                 cam_info["resolution"] = (width, height)
+                pixel_size = self.PIXEL_SIZE_BY_RESOLUTION.get(
+                    (width, height), self.DEFAULT_PIXEL_SIZE)
+                cam_info["pixel_size_x"] = pixel_size
+                cam_info["pixel_size_y"] = pixel_size
+                self._pixel_size_x = pixel_size
+                self._pixel_size_y = pixel_size
 
                 self._configure_exposure()
                 self._configure_trigger()
