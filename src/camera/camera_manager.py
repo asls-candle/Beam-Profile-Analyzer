@@ -1,7 +1,14 @@
+# src/camera/camera_manager.py
+
+import os
 import time
+import math
 import numpy as np
 import logging
 from threading import Lock
+
+os.environ['DC1394_V2_STRATEGY'] = '1'
+
 try:
     from pydc1394 import Camera, Context
     CAMERA_AVAILABLE = True
@@ -10,632 +17,734 @@ except (ImportError, TypeError, OSError) as e:
     print("pydc1394 не найден или не может быть загружен. Функциональность камеры не будет доступна.")
     print("Ошибка: {}".format(e))
 
-# Получаем логгер для модуля camera
 logger = logging.getLogger("camera")
+
+
+# ── Вспомогательные функции ────────────────────────────────────────────────────
+
+def _is_mono16(mode):
+    """Проверяет, является ли режим 16-битным монохромным"""
+    mode_str = str(mode).upper()
+    return 'MONO16' in mode_str or 'GRAY16' in mode_str or 'Y16' in mode_str
+
+
+def _mode_resolution(mode):
+    """Возвращает количество пикселей (w*h) для данного режима"""
+    try:
+        w, h = mode.image_size
+        return w * h
+    except Exception:
+        pass
+    for token in str(mode).split('_'):
+        if 'x' in token:
+            parts = token.split('x')
+            if len(parts) == 2:
+                try:
+                    return int(parts[0]) * int(parts[1])
+                except ValueError:
+                    pass
+    return 0
+
+
+def _get_image_size(mode):
+    """Извлекает (width, height) из объекта режима"""
+    try:
+        return tuple(mode.image_size)
+    except Exception:
+        pass
+    for token in str(mode).split('_'):
+        if 'x' in token:
+            parts = token.split('x')
+            if len(parts) == 2:
+                try:
+                    return int(parts[0]), int(parts[1])
+                except ValueError:
+                    pass
+    return 0, 0
+
+
+def _apply_feature(camera, name, value, mode='manual'):
+    """Безопасно устанавливает параметр камеры"""
+    try:
+        feat = getattr(camera, name)
+        try:
+            feat.mode = mode
+        except Exception:
+            pass
+        try:
+            lo, hi = feat.range
+            if value < lo:
+                logger.debug("CLAMP %s: %s -> %s", name, value, lo)
+                value = lo
+            if value > hi:
+                logger.debug("CLAMP %s: %s -> %s", name, value, hi)
+                value = hi
+        except Exception:
+            pass
+        feat.val = value
+        try:
+            actual = feat.val
+            logger.info("  %s = %s (requested: %s)", name, actual, value)
+        except Exception:
+            logger.info("  %s set to %s (read-back unavailable)", name, value)
+    except AttributeError:
+        logger.debug("  %s not available on this camera", name)
+    except Exception as e:
+        logger.warning("  %s ERROR: %s", name, str(e))
+
+
+def _decode_vendor_model(camera):
+    """Декодирует vendor и model из байт или строки"""
+    try:
+        vendor = camera.vendor.decode('utf-8', errors='replace') \
+            if isinstance(camera.vendor, bytes) else str(camera.vendor)
+    except Exception:
+        vendor = "Unknown"
+    try:
+        model = camera.model.decode('utf-8', errors='replace') \
+            if isinstance(camera.model, bytes) else str(camera.model)
+    except Exception:
+        model = "Unknown"
+    return vendor.strip(), model.strip()
+
+
+def _make_camera_display_name(vendor, model, guid_str):
+    """
+    Формирует отображаемое имя камеры по аналогии с claude_shot:
+    «Vendor Model (GUID_последние8)»
+    """
+    short_guid = guid_str[-8:] if len(guid_str) >= 8 else guid_str
+    return "{} {} ({})".format(vendor, model, short_guid)
+
 
 class CameraManager:
     """
-    Класс для управления камерой и получения данных с нее
+    Менеджер камер с полностью динамическим обнаружением.
+
+    Никаких предустановленных камер нет. Имена формируются из
+    vendor/model/GUID как в claude_shot. Размер пикселя задаётся
+    пользователем через set_pixel_size() после подключения.
+
+    Для каждой камеры автоматически выбирается максимальное разрешение
+    в монохромном 16-битном режиме (FORMAT7_0 → Y16/MONO16).
     """
-    # Информация о камерах
-    CAMERAS = {
-        "GUN_YAG1": {
-            "resolution": (1032, 776),
-            "pixel_size_x": 0.02840909,
-            "pixel_size_y": 0.02840909,
-            "linux_name": "fw1"
-        },
-        "GUN_YAG2": {
-            "resolution": (1624, 1224),
-            "pixel_size_x": 0.01875468,
-            "pixel_size_y": 0.01875468,
-            "linux_name": "fw2"
-        }
+
+    # Настройки экспозиции по умолчанию
+    DEFAULT_EXPOSURE = {
+        "shutter": 1,
+        "gain": 0,
+        "exposure": 0,
     }
-    
-    def __init__(self, use_trigger=False):
+
+    # Размер пикселя по умолчанию (мм) — задаётся пользователем
+    DEFAULT_PIXEL_SIZE = 0.01
+
+    CAPTURE_BUFSIZE = 8
+    WARMUP_FRAMES = 5
+    DEQUEUE_ATTEMPTS = 30
+    DEQUEUE_DELAY = 0.05
+
+    def __init__(self, use_trigger=False, use_format7=True, manual_exposure=True):
         """
-        Инициализирует менеджер камеры
-        
         Args:
-            use_trigger: Использовать ли внешний триггер для камеры
+            use_trigger:      Использовать внешний триггер
+            use_format7:      Предпочитать FORMAT7_0 (полный сенсор) если доступен
+            manual_exposure:  Ручная экспозиция (рекомендуется для измерений)
         """
         self.camera = None
         self.camera_name = None
         self.context = None
         self.is_connected = False
-        self.use_trigger = use_trigger  # Флаг использования триггера
-        self.lock = Lock()  # Для потокобезопасности
-        logger.info("Инициализация CameraManager, use_trigger=%s", use_trigger)
-        print("Инициализация CameraManager, режим триггера: {}".format("Внешний" if use_trigger else "Без триггера"))
-        
-    def set_trigger_mode(self, use_trigger):
-        """
-        Устанавливает режим триггера камеры
-        
-        Args:
-            use_trigger: True для использования внешнего триггера, False для работы без триггера
-            
-        Returns:
-            True если режим успешно изменен, иначе False
-        """
         self.use_trigger = use_trigger
-        logger.info("Установка режима триггера: %s", "Внешний" if use_trigger else "Без триггера")
-        print("Установка режима триггера: {}".format("Внешний" if use_trigger else "Без триггера"))
-        
-        # Если камера подключена, перенастраиваем ее
-        if self.is_connected and self.camera is not None:
-            return self._configure_camera()
-        return True
-        
+        self.use_format7 = use_format7
+        self.manual_exposure = manual_exposure
+        self.lock = Lock()
+
+        self._width = 0
+        self._height = 0
+        self._byte_order = '>u2'
+        self._pixel_size_x = self.DEFAULT_PIXEL_SIZE
+        self._pixel_size_y = self.DEFAULT_PIXEL_SIZE
+        self._video_started = False
+
+        # Словарь обнаруженных камер: display_name -> info dict
+        self.cameras = {}
+
+        logger.info("Инициализация CameraManager, use_trigger=%s, use_format7=%s",
+                    use_trigger, use_format7)
+
+    # ── Обнаружение камер ─────────────────────────────────────────────────────
+
     def get_camera_list(self):
         """
-        Возвращает список доступных камер
-        
+        Обнаруживает все подключённые FireWire-камеры.
+
+        Имя каждой камеры формируется как «Vendor Model (GUID_short)»
+        — никаких предустановленных имён и параметров нет.
+
         Returns:
-            Список имен камер
+            Список отображаемых имён обнаруженных камер
         """
         if not CAMERA_AVAILABLE:
-            logger.warning("pydc1394 не доступен, возвращаем список камер из конфигурации")
-            print("pydc1394 не доступен, возвращаем список камер из конфигурации")
-            return list(self.CAMERAS.keys())
-            
-        # Получаем список физически подключенных камер
+            logger.warning("pydc1394 не доступен")
+            return []
+
         try:
-            logger.info("Получение списка физически подключенных камер")
-            print("pydc1394: Получение списка физически подключенных камер")
-            
-            # Логируем текущую конфигурацию CAMERAS
-            logger.info("Текущая конфигурация CAMERAS: %s", list(self.CAMERAS.keys()))
-            print("pydc1394: Текущая конфигурация CAMERAS: {}".format(list(self.CAMERAS.keys())))
-            
             context = Context()
-            cameras = context.cameras
-            
-            logger.info("Найдено физических камер: %d", len(cameras))
-            print("pydc1394: Найдено физических камер: {}".format(len(cameras)))
-            
-            if not cameras:
-                logger.warning("Физические камеры не обнаружены, возвращаем список из конфигурации")
-                print("pydc1394: Физические камеры не обнаружены, возвращаем список из конфигурации")
-                return list(self.CAMERAS.keys())
-            
-            # Создаем список имен камер на основе реальных устройств
-            available_cameras = []
-            
-            # Словарь для отслеживания соответствия физических камер и имен из конфигурации
-            mapped_cameras = {}
-            
-            # Словарь для сопоставления GUID камер с камерами из конфигурации
-            # ключ - GUID камеры, значение - название камеры из предустановок
-            camera_guid_mapping = {
-                "49712223529985966": "GUN_YAG1",  # GUID первой камеры
-                "49712223529993805": "GUN_YAG2"   # GUID второй камеры
-            }
-            
-            for i, cam in enumerate(cameras):
+            hw_cameras = context.cameras
+            if not hw_cameras:
+                logger.warning("Камеры не обнаружены в системе")
+                return []
+
+            self.cameras = {}
+
+            for i, cam_entry in enumerate(hw_cameras):
+                cam_guid = cam_entry[0]
+                guid_str = str(cam_guid)
+
+                vendor, model = "Unknown", "Unknown"
+                resolution = (0, 0)
+
                 try:
-                    # Пытаемся получить информацию о камере
-                    logger.debug("Получение информации о камере %d: %s", i, cam)
-                    print("pydc1394: Получение информации о камере {}: {}".format(i, cam))
-                    
-                    # Проверяем, есть ли GUID камеры в нашем словаре сопоставления
-                    camera_guid = str(cam[0])
-                    logger.info("GUID камеры %d: %s", i, camera_guid)
-                    print("pydc1394: GUID камеры {}: {}".format(i, camera_guid))
-                    
-                    if camera_guid in camera_guid_mapping:
-                        # Если GUID есть в словаре, используем предустановленное имя
-                        camera_name = camera_guid_mapping[camera_guid]
-                        logger.info("Сопоставлена камера %d с предустановкой: %s", i, camera_name)
-                        print("pydc1394: Сопоставлена камера {} с предустановкой: {}".format(i, camera_name))
-                        mapped_cameras[camera_name] = True
-                        
-                        if camera_name not in available_cameras:
-                            available_cameras.append(camera_name)
-                            logger.info("Добавлена предустановленная камера в список доступных: %s", camera_name)
-                            print("pydc1394: Добавлена предустановленная камера в список доступных: {}".format(camera_name))
-                        
-                        # Пропускаем дальнейшие шаги обработки этой камеры
-                        continue
-                    
-                    # Если камера не сопоставлена по GUID, продолжаем стандартную обработку
-                    camera = Camera(guid=cam[0])
-                    vendor = camera.vendor.decode('utf-8', errors='replace') if isinstance(camera.vendor, bytes) else camera.vendor
-                    model = camera.model.decode('utf-8', errors='replace') if isinstance(camera.model, bytes) else camera.model
-                    
-                    logger.info("Камера %d - Vendor: %s, Model: %s", i, vendor, model)
-                    print("pydc1394: Камера {} - Vendor: {}, Model: {}".format(i, vendor, model))
-                    
-                    # Проверяем, соответствует ли эта физическая камера одной из заранее настроенных
-                    # Проходим по всем предустановленным камерам
-                    matched_preset = None
-                    for preset_name, preset_info in self.CAMERAS.items():
-                        # Получаем linux_name из предустановки
-                        preset_linux_name = preset_info.get("linux_name", "")
-                        
-                        # Если linux_name содержится в информации о физической камере
-                        if preset_linux_name and preset_linux_name in str(cam):
-                            matched_preset = preset_name
-                            logger.info("Найдено соответствие: физическая камера %d соответствует предустановке %s", 
-                                      i, preset_name)
-                            print("pydc1394: Найдено соответствие: физическая камера {} соответствует предустановке {}".format(i, preset_name))
-                            mapped_cameras[preset_name] = True
-                            break
-                    
-                    # Если найдено соответствие с предустановкой, используем это имя
-                    if matched_preset:
-                        camera_name = matched_preset
-                    else:
-                        # Создаем имя на основе информации о камере
-                        camera_name = "Camera_{}_{}_{}"
-                        camera_name = camera_name.format(i, vendor, model)
-                        logger.info("Обнаружена новая камера без предустановки: %s", camera_name)
-                        print("pydc1394: Обнаружена новая камера без предустановки: {}".format(camera_name))
-                        
-                        # Добавляем информацию о камере в словарь CAMERAS, если её там еще нет
-                        if camera_name not in self.CAMERAS:
-                            try:
-                                width = camera.width
-                                height = camera.height
-                                self.CAMERAS[camera_name] = {
-                                    "resolution": (width, height),
-                                    "pixel_size_x": 0.01, # приблизительно, нужно уточнить для реальной камеры
-                                    "pixel_size_y": 0.01, # приблизительно, нужно уточнить для реальной камеры
-                                    "linux_name": str(cam)
-                                }
-                                logger.info("Добавлена новая камера в конфигурацию: %s, разрешение %dx%d", 
-                                           camera_name, width, height)
-                                print("pydc1394: Добавлена новая камера в конфигурацию: {}, разрешение {}x{}".format(
-                                    camera_name, width, height))
-                            except AttributeError:
-                                # Если не удалось получить разрешение
-                                self.CAMERAS[camera_name] = {
-                                    "resolution": (800, 600),  # стандартное разрешение
-                                    "pixel_size_x": 0.01,
-                                    "pixel_size_y": 0.01,
-                                    "linux_name": str(cam)
-                                }
-                                logger.warning("Не удалось получить разрешение камеры %s, установлено стандартное значение", camera_name)
-                                print("pydc1394: Не удалось получить разрешение камеры {}, установлено стандартное значение".format(camera_name))
-                    
-                    # Добавляем имя камеры в список доступных
-                    if camera_name not in available_cameras:
-                        available_cameras.append(camera_name)
-                        logger.info("Добавлена камера в список доступных: %s", camera_name)
-                        print("pydc1394: Добавлена камера в список доступных: {}".format(camera_name))
-                    else:
-                        logger.warning("Камера %s уже есть в списке доступных", camera_name)
-                        print("pydc1394: Камера {} уже есть в списке доступных".format(camera_name))
-                    
-                    # Закрываем соединение с камерой
-                    try:
-                        if hasattr(camera, 'stop_capture'):
-                            camera.stop_capture()
-                    except Exception as e:
-                        logger.warning("Ошибка при остановке захвата для камеры %s: %s", camera_name, str(e))
-                        print("pydc1394: Ошибка при остановке захвата для камеры {}: {}".format(camera_name, str(e)))
-                    
-                    del camera
-                    
+                    tmp_cam = Camera(guid=cam_guid)
+                    vendor, model = _decode_vendor_model(tmp_cam)
+                    resolution = self._detect_max_resolution(tmp_cam)
+                    del tmp_cam
                 except Exception as e:
-                    logger.error("Ошибка при получении информации о камере %d: %s", i, e, exc_info=True)
-                    print("pydc1394: Ошибка при получении информации о камере {}: {}".format(i, e))
-                    
-                    # Проверяем, есть ли GUID камеры в нашем словаре сопоставления даже при ошибке
-                    camera_guid = str(cam[0])
-                    if camera_guid in camera_guid_mapping:
-                        # Если GUID есть в словаре, используем предустановленное имя
-                        camera_name = camera_guid_mapping[camera_guid]
-                        logger.info("Сопоставлена камера с ошибкой %d с предустановкой: %s", i, camera_name)
-                        print("pydc1394: Сопоставлена камера с ошибкой {} с предустановкой: {}".format(i, camera_name))
-                        mapped_cameras[camera_name] = True
-                        
-                        if camera_name not in available_cameras:
-                            available_cameras.append(camera_name)
-                            logger.info("Добавлена предустановленная камера в список доступных: %s", camera_name)
-                            print("pydc1394: Добавлена предустановленная камера в список доступных: {}".format(camera_name))
-                        
-                        # Пропускаем добавление дополнительного имени
-                        continue
-                    
-                    # Добавляем камеру с общим именем только если она не сопоставлена с предустановкой
-                    camera_name = "Camera_{}".format(i)
-                    if camera_name not in self.CAMERAS:
-                        self.CAMERAS[camera_name] = {
-                            "resolution": (800, 600),
-                            "pixel_size_x": 0.01,
-                            "pixel_size_y": 0.01,
-                            "linux_name": str(cam)
-                        }
-                        logger.info("Добавлена камера с ограниченной информацией: %s", camera_name)
-                        print("pydc1394: Добавлена камера с ограниченной информацией: {}".format(camera_name))
-                    
-                    # Добавляем только если это не дубликат предустановленной камеры
-                    if camera_name not in available_cameras:
-                        available_cameras.append(camera_name)
-                        logger.info("Добавлена камера с ошибкой в список доступных: %s", camera_name)
-                        print("pydc1394: Добавлена камера с ошибкой в список доступных: {}".format(camera_name))
-            
-            # Добавляем предустановленные камеры, которые не были сопоставлены с физическими
-            unmapped_presets = [name for name in self.CAMERAS.keys() if name not in mapped_cameras 
-                              and name.startswith("GUN_YAG")]  # Фильтруем только стандартные камеры
-            
-            if unmapped_presets:
-                logger.info("Предустановленные камеры без физического соответствия: %s", unmapped_presets)
-                print("pydc1394: Предустановленные камеры без физического соответствия: {}".format(unmapped_presets))
-            
-            # Если не найдено ни одной камеры, вернем весь список из конфигурации
-            if not available_cameras:
-                logger.warning("Физические камеры не обнаружены, возвращаем список из конфигурации")
-                print("pydc1394: Физические камеры не обнаружены, возвращаем список из конфигурации")
-                return list(self.CAMERAS.keys())
-            
-            logger.info("Итоговый список камер (%d): %s", len(available_cameras), available_cameras)
-            print("pydc1394: Итоговый список камер ({}): {}".format(len(available_cameras), available_cameras))
-            return available_cameras
-            
+                    logger.warning("Не удалось получить информацию о камере %d: %s", i, e)
+
+                # Уникальное имя на основе реальных данных камеры
+                display_name = _make_camera_display_name(vendor, model, guid_str)
+
+                # Если вдруг два устройства дали одинаковое имя — добавляем индекс
+                if display_name in self.cameras:
+                    display_name = "{} [{}]".format(display_name, i)
+
+                self.cameras[display_name] = {
+                    "guid": cam_guid,
+                    "guid_str": guid_str,
+                    "vendor": vendor,
+                    "model": model,
+                    "camera_name": display_name,
+                    "resolution": resolution,
+                    # Размер пикселя неизвестен — пользователь задаст вручную
+                    "pixel_size_x": self.DEFAULT_PIXEL_SIZE,
+                    "pixel_size_y": self.DEFAULT_PIXEL_SIZE,
+                }
+
+                logger.info("Обнаружена камера: %s, GUID=%s, разрешение=%s",
+                            display_name, guid_str, resolution)
+
+            return list(self.cameras.keys())
+
         except Exception as e:
-            logger.error("Ошибка при получении списка камер: %s", e, exc_info=True)
-            print("pydc1394: Ошибка при получении списка камер: {}".format(e))
-            return list(self.CAMERAS.keys())
-    
+            logger.error("Ошибка при поиске камер: %s", e, exc_info=True)
+            return []
+
+    def _detect_max_resolution(self, camera):
+        """
+        Определяет максимальное разрешение сенсора по доступным режимам.
+
+        Приоритет: FORMAT7_0 (max_image_size) → лучший Y16/MONO16.
+
+        Args:
+            camera: Временный объект Camera для чтения режимов
+
+        Returns:
+            (width, height)
+        """
+        best_w, best_h = 0, 0
+
+        try:
+            all_modes = list(camera.modes)
+        except Exception:
+            return (0, 0)
+
+        # 1. FORMAT7_0 — обычно возвращает полный сенсор
+        fmt7 = [m for m in all_modes if 'FORMAT7_0' in str(m)]
+        if fmt7:
+            mode = fmt7[0]
+            for attr in ('max_image_size', 'image_size'):
+                try:
+                    val = getattr(mode, attr)
+                    if val and len(val) == 2 and val[0] > 0:
+                        best_w, best_h = int(val[0]), int(val[1])
+                        logger.debug("FORMAT7_0 %s: %dx%d", attr, best_w, best_h)
+                        break
+                except Exception:
+                    pass
+
+        # 2. Перебираем Y16/MONO16 — берём наибольшее разрешение
+        for m in all_modes:
+            if _is_mono16(m):
+                w, h = _get_image_size(m)
+                if w * h > best_w * best_h:
+                    best_w, best_h = w, h
+
+        return (best_w, best_h)
+
+    # ── Информация о камере ───────────────────────────────────────────────────
+
     def get_camera_info(self, camera_name=None):
         """
-        Возвращает информацию о камере
-        
+        Возвращает информацию о камере.
+
         Args:
-            camera_name: Имя камеры. Если None, используется текущая выбранная камера.
-            
+            camera_name: Имя камеры. Если None — текущая подключённая.
+
         Returns:
-            Словарь с информацией о камере или None, если камера не найдена
+            Словарь с информацией о камере или None
         """
         if camera_name is None:
             camera_name = self.camera_name
-            
         if camera_name is None:
             return None
-            
-        if camera_name in self.CAMERAS:
-            return self.CAMERAS[camera_name]
-        
-        logger.warning("Камера %s не найдена в конфигурации", camera_name)
-        print("Камера {} не найдена в конфигурации".format(camera_name))
-        return None
-        
+        return self.cameras.get(camera_name)
+
+    def set_pixel_size(self, pixel_size_x, pixel_size_y, camera_name=None):
+        """
+        Устанавливает размер пикселя для камеры.
+
+        Вызывается из UI после того, как пользователь вводит значение.
+
+        Args:
+            pixel_size_x: Размер пикселя по X (мм)
+            pixel_size_y: Размер пикселя по Y (мм)
+            camera_name:  Имя камеры. Если None — текущая подключённая.
+        """
+        if camera_name is None:
+            camera_name = self.camera_name
+        if camera_name is None:
+            return
+
+        if camera_name in self.cameras:
+            self.cameras[camera_name]["pixel_size_x"] = pixel_size_x
+            self.cameras[camera_name]["pixel_size_y"] = pixel_size_y
+            logger.info("Pixel size for %s: %.8f x %.8f mm",
+                        camera_name, pixel_size_x, pixel_size_y)
+
+        # Обновляем и внутренние поля если это текущая камера
+        if camera_name == self.camera_name:
+            self._pixel_size_x = pixel_size_x
+            self._pixel_size_y = pixel_size_y
+
+    # ── Подключение / отключение ──────────────────────────────────────────────
+
     def connect_to_camera(self, camera_name):
         """
-        Подключается к камере по имени
-        
+        Подключается к камере: выбирает максимальный mono16-режим,
+        настраивает экспозицию, запускает поток.
+
         Args:
-            camera_name: Имя камеры
-            
+            camera_name: Имя из get_camera_list()
+
         Returns:
-            True если подключение успешно, иначе False
+            True если успешно
         """
         if not CAMERA_AVAILABLE:
-            logger.error("pydc1394 не установлен. Невозможно подключиться к камере.")
-            print("pydc1394 не установлен. Невозможно подключиться к камере.")
+            logger.error("pydc1394 не установлен")
             return False
-            
-        if camera_name not in self.CAMERAS:
-            logger.error("Камера %s не найдена в конфигурации", camera_name)
-            print("Камера {} не найдена в конфигурации".format(camera_name))
+
+        if camera_name not in self.cameras:
+            logger.error("Камера '%s' не найдена. Вызовите get_camera_list() сначала.",
+                         camera_name)
             return False
-            
+
         try:
             with self.lock:
-                logger.info("Подключение к камере %s", camera_name)
-                print("pydc1394: Подключение к камере {}".format(camera_name))
-                
-                # Закрываем текущее соединение если есть
                 if self.camera is not None:
-                    self.disconnect_camera()
-                
-                # Инициализируем контекст pydc1394
+                    self._stop_and_cleanup()
+
+                cam_info = self.cameras[camera_name]
+                cam_guid = cam_info["guid"]
+
+                logger.info("Подключение к камере '%s' (GUID: %s)", camera_name, cam_guid)
+
                 self.context = Context()
-                
-                # Получаем список камер
-                cameras = self.context.cameras
-                if not cameras:
-                    logger.error("Камеры не найдены в системе")
-                    print("Камеры не найдены в системе")
-                    return False
-                
-                # Словарь сопоставления имен камер с GUID
-                camera_name_to_guid = {
-                    "GUN_YAG1": "49712223529985966",
-                    "GUN_YAG2": "49712223529993805"
-                }
-                
-                # Проверяем, есть ли для выбранной камеры сопоставленный GUID
-                if camera_name in camera_name_to_guid:
-                    target_guid = camera_name_to_guid[camera_name]
-                    logger.info("Целевой GUID для камеры %s: %s", camera_name, target_guid)
-                    print("pydc1394: Целевой GUID для камеры {}: {}".format(camera_name, target_guid))
-                    
-                    # Ищем камеру по GUID
-                    camera_found = False
-                    cam_guid = None
-                    
-                    for cam in cameras:
-                        current_guid = str(cam[0])
-                        logger.debug("Проверка камеры с GUID: %s", current_guid)
-                        print("pydc1394: Проверка камеры с GUID: {}".format(current_guid))
-                        
-                        if current_guid == target_guid:
-                            cam_guid = cam[0]
-                            camera_found = True
-                            logger.info("Найдена камера %s с GUID: %s", camera_name, current_guid)
-                            print("pydc1394: Найдена камера {} с GUID: {}".format(camera_name, current_guid))
-                            break
-                else:
-                    # Если нет прямого сопоставления, ищем по linux_name как раньше
-                    linux_name = self.CAMERAS[camera_name]["linux_name"]
-                    logger.debug("Поиск камеры с linux_name: %s", linux_name)
-                    print("pydc1394: Поиск камеры с linux_name: {}".format(linux_name))
-                    
-                    camera_found = False
-                    cam_guid = None
-                    
-                    for cam in cameras:
-                        # Проверяем соответствие имени камеры
-                        cam_info = str(cam)
-                        logger.debug("Проверка камеры: %s", cam_info)
-                        print("pydc1394: Проверка камеры: {}".format(cam_info))
-                        
-                        if linux_name in cam_info:
-                            cam_guid = cam[0]  # GUID находится в первом элементе кортежа
-                            camera_found = True
-                            logger.info("Найдена камера %s с GUID: %s", camera_name, cam_guid)
-                            print("pydc1394: Найдена камера {} с GUID: {}".format(camera_name, cam_guid))
-                            break
-                
-                if not camera_found:
-                    print("Камера {} не найдена в системе".format(camera_name))
-                    logger.error("Камера {} не найдена в системе".format(camera_name))
-                    return False
-                
-                # Создаем объект камеры с указанным GUID
                 self.camera = Camera(guid=cam_guid)
-                
-                # Выводим информацию о камере
-                print("Подключено к камере: {}".format(camera_name))
-                logger.info("Подключено к камере: %s", camera_name)
-                if hasattr(self.camera, 'vendor') and hasattr(self.camera, 'model'):
-                    vendor = self.camera.vendor.decode('utf-8', errors='replace') if isinstance(self.camera.vendor, bytes) else self.camera.vendor
-                    model = self.camera.model.decode('utf-8', errors='replace') if isinstance(self.camera.model, bytes) else self.camera.model
-                    print("Производитель: {}".format(vendor))
-                    print("Модель: {}".format(model))
-                    logger.info("Производитель: %s", vendor)
-                    logger.info("Модель: %s", model)
-                
-                # Инициализируем камеру
-                self.camera.start_capture()
-                
-                # Настраиваем камеру
-                self._configure_camera()
-                
+
+                # Выбираем режим с максимальным разрешением
+                width, height = self._select_and_apply_mode()
+
+                if width == 0 or height == 0:
+                    logger.error("Не удалось определить разрешение камеры")
+                    self._stop_and_cleanup()
+                    return False
+
+                self._width = width
+                self._height = height
+
+                # Берём pixel_size из словаря (мог быть задан пользователем)
+                self._pixel_size_x = cam_info["pixel_size_x"]
+                self._pixel_size_y = cam_info["pixel_size_y"]
+
+                # Обновляем разрешение в словаре
+                cam_info["resolution"] = (width, height)
+
+                self._configure_exposure()
+                self._configure_trigger()
+
+                time.sleep(0.3)
+
+                self.camera.start_capture(bufsize=self.CAPTURE_BUFSIZE)
+                self.camera.start_video()
+                self._video_started = True
+                time.sleep(0.5)
+
+                self._flush_warmup_frames()
+                self._detect_byte_order()
+
                 self.camera_name = camera_name
                 self.is_connected = True
-                
-                # Выводим информацию о режиме триггера
-                print("Режим триггера: {}".format("Внешний" if self.use_trigger else "Без триггера"))
-                logger.info("Режим триггера: {}".format("Внешний" if self.use_trigger else "Без триггера"))
-                
+
+                logger.info("Камера '%s' подключена: %dx%d, byte_order=%s",
+                            camera_name, width, height, self._byte_order)
                 return True
-                
+
         except Exception as e:
-            print("Ошибка при подключении к камере: {}".format(e))
-            logger.error("Ошибка при подключении к камере: {}".format(e))
+            logger.error("Ошибка при подключении к '%s': %s", camera_name, e, exc_info=True)
+            self._stop_and_cleanup()
             return False
-    
+
     def disconnect_camera(self):
         """
-        Отключается от камеры
-        
+        Отключается от текущей камеры.
+
         Returns:
-            True если отключение успешно, иначе False
+            True если успешно
         """
-        if not self.is_connected or self.camera is None:
-            return True
-            
         try:
             with self.lock:
-                logger.info("Отключение от камеры %s", self.camera_name)
-                print("Отключение от камеры {}".format(self.camera_name))
-                self.camera.stop_capture()
-                del self.camera
-                self.camera = None
+                name = self.camera_name
+                self._stop_and_cleanup()
                 self.camera_name = None
-                if self.context is not None:
-                    del self.context
-                self.context = None
                 self.is_connected = False
-                logger.info("Камера успешно отключена")
-                print("Камера успешно отключена")
+                logger.info("Камера '%s' отключена", name)
                 return True
         except Exception as e:
-            logger.error("Ошибка при отключении от камеры: %s", e, exc_info=True)
-            print("Ошибка при отключении от камеры: {}".format(e))
+            logger.error("Ошибка при отключении: %s", e, exc_info=True)
             return False
-    
-    def _configure_camera(self):
-        """
-        Настраивает параметры камеры
-        
-        Returns:
-            True если настройка успешна, иначе False
-        """
-        if not self.is_connected or self.camera is None:
-            return False
-            
-        try:
-            logger.info("Настройка параметров камеры %s", self.camera_name)
-            print("Настройка параметров камеры {}".format(self.camera_name))
-            
-            # Настраиваем общие параметры камеры
+
+    def _stop_and_cleanup(self):
+        """Останавливает захват и освобождает ресурсы"""
+        if self.camera is not None:
             try:
-                # Настраиваем яркость
-                if hasattr(self.camera, 'brightness'):
-                    self.camera.brightness.mode = 'auto'
-                    if self.camera.brightness.mode != 'auto':
-                        self.camera.brightness.value = 200  # Увеличиваем яркость
-                        logger.info("Установлена ручная яркость: %s", self.camera.brightness.value)
-                        print("Установлена ручная яркость: {}".format(self.camera.brightness.value))
-                
-                # Настраиваем экспозицию
-                if hasattr(self.camera, 'exposure'):
-                    self.camera.exposure.mode = 'auto'
-                    if self.camera.exposure.mode != 'auto':
-                        self.camera.exposure.value = 400  # Увеличиваем экспозицию
-                        logger.info("Установлена ручная экспозиция: %s", self.camera.exposure.value)
-                        print("Установлена ручная экспозиция: {}".format(self.camera.exposure.value))
-                
-                # Настраиваем баланс белого
-                if hasattr(self.camera, 'white_balance'):
-                    self.camera.white_balance.mode = 'auto'
-                    logger.info("Установлен автоматический баланс белого")
-                    print("Установлен автоматический баланс белого")
-                
-                # Устанавливаем максимальное усиление для камеры
-                if hasattr(self.camera, 'gain'):
-                    self.camera.gain.mode = 'auto'
-                    if self.camera.gain.mode != 'auto':
-                        self.camera.gain.value = self.camera.gain.max
-                        logger.info("Установлено максимальное усиление: %s", self.camera.gain.value)
-                        print("Установлено максимальное усиление: {}".format(self.camera.gain.value))
-            except AttributeError:
-                logger.warning("Внимание: некоторые автоматические настройки не поддерживаются камерой")
-                print("Внимание: некоторые автоматические настройки не поддерживаются камерой")
-            
-            # Настраиваем режим триггера, если нужно
-            if self.use_trigger:
-                logger.info("Настройка камеры для работы с внешним триггером")
-                print("Настройка камеры для работы с внешним триггером")
-                # Устанавливаем режим триггера
-                self.camera.trigger_mode = 'external'
-                
-                # Устанавливаем источник триггера (обычно 0 для Line0)
-                self.camera.trigger_source = 0
-                logger.info("Включен внешний триггер, источник: %s", self.camera.trigger_source)
-                print("Включен внешний триггер, источник: {}".format(self.camera.trigger_source))
-            else:
-                # Отключаем режим триггера, если он был включен
-                if hasattr(self.camera, 'trigger_mode') and self.camera.trigger_mode != 'internal':
-                    logger.info("Отключение внешнего триггера")
-                    print("Отключение внешнего триггера")
-                    self.camera.trigger_mode = 'internal'
-            
-            # Применяем настройки
-            self.camera.apply_settings()
-            logger.info("Настройки камеры успешно применены")
-            print("Настройки камеры успешно применены")
-            return True
-            
+                if self._video_started:
+                    self.camera.stop_video()
+                    self._video_started = False
+                self.camera.stop_capture()
+            except Exception as e:
+                logger.warning("Ошибка при остановке камеры: %s", e)
+            try:
+                del self.camera
+            except Exception:
+                pass
+            self.camera = None
+
+        if self.context is not None:
+            try:
+                del self.context
+            except Exception:
+                pass
+            self.context = None
+
+    # ── Выбор видеорежима ─────────────────────────────────────────────────────
+
+    def _select_and_apply_mode(self):
+        """
+        Выбирает режим с максимальным разрешением в mono16.
+
+        Приоритет: FORMAT7_0 → лучший Y16/MONO16.
+
+        Returns:
+            (width, height)
+        """
+        all_modes = list(self.camera.modes)
+        logger.info("Доступные видеорежимы: %s", [str(m) for m in all_modes])
+
+        # 1. FORMAT7_0 — полный сенсор
+        if self.use_format7:
+            fmt7 = [m for m in all_modes if 'FORMAT7_0' in str(m)]
+            if fmt7:
+                mode = fmt7[0]
+                self.camera.mode = mode
+
+                width, height = 0, 0
+                for attr in ('max_image_size', 'image_size'):
+                    try:
+                        val = getattr(mode, attr)
+                        if val and len(val) == 2 and val[0] > 0:
+                            width, height = int(val[0]), int(val[1])
+                            logger.info("FORMAT7_0 %s: %dx%d", attr, width, height)
+                            break
+                    except Exception:
+                        pass
+
+                if width > 0 and height > 0:
+                    self._configure_format7(mode, width, height)
+                    logger.info("Выбран FORMAT7_0: %dx%d (полный сенсор)", width, height)
+                    return width, height
+                else:
+                    logger.warning("FORMAT7_0 найден, но размер не определён — fallback на Y16")
+
+        # 2. Лучший Y16/MONO16 по разрешению
+        y16_modes = [m for m in all_modes if _is_mono16(m)]
+        if not y16_modes:
+            logger.error("Нет доступных Y16/MONO16 режимов")
+            return 0, 0
+
+        y16_modes.sort(key=_mode_resolution, reverse=True)
+        best_mode = y16_modes[0]
+        self.camera.mode = best_mode
+        width, height = _get_image_size(best_mode)
+
+        logger.info("Выбран режим %s: %dx%d", best_mode, width, height)
+        return width, height
+
+    def _configure_format7(self, mode, width, height):
+        """Настраивает FORMAT7: Y16, полный ROI, максимальный packet_size"""
+        try:
+            mode.color_coding = 'Y16'
+            logger.info("  FORMAT7 color coding: Y16")
         except Exception as e:
-            logger.error("Ошибка при настройке камеры: %s", e, exc_info=True)
-            print("Ошибка при настройке камеры: {}".format(e))
-            return False
-    
+            logger.warning("  FORMAT7 color coding: не удалось (%s)", e)
+
+        try:
+            mode.image_position = (0, 0)
+            mode.image_size = (width, height)
+            logger.info("  FORMAT7 ROI: 0,0 + %dx%d", width, height)
+        except Exception as e:
+            logger.warning("  FORMAT7 ROI: не удалось (%s)", e)
+
+        try:
+            ps_range = None
+            for attr in ('packet_size_range', 'packet_size_info', 'packet_per_frame_range'):
+                try:
+                    ps_range = getattr(mode, attr)
+                    break
+                except AttributeError:
+                    pass
+
+            if ps_range is not None:
+                lo, hi = ps_range
+                mode.packet_size = hi
+                logger.info("  FORMAT7 packet size: %s (max)", hi)
+            else:
+                try:
+                    rec = mode.recommended_packet_size
+                    mode.packet_size = rec
+                    logger.info("  FORMAT7 packet size: %s (recommended)", rec)
+                except Exception:
+                    logger.info("  FORMAT7 packet size: default")
+        except Exception as e:
+            logger.warning("  FORMAT7 packet size: ошибка (%s)", e)
+
+    # ── Экспозиция и триггер ──────────────────────────────────────────────────
+
+    def _configure_exposure(self):
+        if self.manual_exposure:
+            logger.info("Настройка ручной экспозиции")
+            _apply_feature(self.camera, 'exposure', self.DEFAULT_EXPOSURE["exposure"], mode='manual')
+            _apply_feature(self.camera, 'shutter',  self.DEFAULT_EXPOSURE["shutter"],  mode='manual')
+            _apply_feature(self.camera, 'gain',     self.DEFAULT_EXPOSURE["gain"],     mode='manual')
+        else:
+            logger.info("Автоматическая экспозиция")
+            _apply_feature(self.camera, 'exposure', 0, mode='auto')
+            _apply_feature(self.camera, 'shutter',  0, mode='auto')
+            _apply_feature(self.camera, 'gain',     0, mode='auto')
+
+    def _configure_trigger(self):
+        try:
+            if self.use_trigger:
+                self.camera.trigger_mode = 'external'
+                self.camera.trigger_source = 0
+                logger.info("Внешний триггер, источник: 0")
+            else:
+                if hasattr(self.camera, 'trigger_mode'):
+                    self.camera.trigger_mode = 'internal'
+                    logger.info("Триггер: internal")
+        except Exception as e:
+            logger.warning("Ошибка настройки триггера: %s", e)
+
+    def set_trigger_mode(self, use_trigger):
+        self.use_trigger = use_trigger
+        if self.is_connected and self.camera is not None:
+            self._configure_trigger()
+        return True
+
+    def set_exposure(self, shutter=None, gain=None, exposure=None):
+        if not self.is_connected or self.camera is None:
+            return
+        if shutter is not None:
+            _apply_feature(self.camera, 'shutter', shutter, mode='manual')
+        if gain is not None:
+            _apply_feature(self.camera, 'gain', gain, mode='manual')
+        if exposure is not None:
+            _apply_feature(self.camera, 'exposure', exposure, mode='manual')
+
+    # ── Прогрев и byte order ──────────────────────────────────────────────────
+
+    def _flush_warmup_frames(self):
+        logger.info("Сброс %d прогревочных кадров...", self.WARMUP_FRAMES)
+        for _ in range(self.WARMUP_FRAMES):
+            frame = self.camera.dequeue(poll=False)
+            if frame is not None:
+                frame.enqueue()
+
+    def _detect_byte_order(self):
+        """
+        Определяет порядок байт по первому кадру:
+        сравнивает число насыщенных пикселей при BE и LE интерпретации.
+        """
+        frame = self._dequeue_with_retry()
+        if frame is None:
+            logger.warning("Не удалось получить кадр для определения byte order")
+            return
+
+        raw = bytes(frame)
+        frame.enqueue()
+        n_pixels = len(raw) // 2
+
+        if n_pixels == 0:
+            return
+
+        w, h = self._width, self._height
+        if w * h != n_pixels:
+            logger.warning("Размер буфера (%d пикс) != %dx%d, пересчёт", n_pixels, w, h)
+            if n_pixels > 0:
+                side = int(math.sqrt(n_pixels))
+                w = side
+                h = n_pixels // side
+                self._width = w
+                self._height = h
+
+        arr_be = np.frombuffer(raw, dtype='>u2').reshape((h, w))
+        arr_le = np.frombuffer(raw, dtype='<u2').reshape((h, w))
+        sat_be = int(np.sum(arr_be >= 65520))
+        sat_le = int(np.sum(arr_le >= 65520))
+
+        if sat_le < sat_be:
+            self._byte_order = '<u2'
+            logger.info("Byte order: little-endian")
+        else:
+            self._byte_order = '>u2'
+            logger.info("Byte order: big-endian")
+
+    # ── Захват кадров ─────────────────────────────────────────────────────────
+
+    def _dequeue_with_retry(self):
+        for _ in range(self.DEQUEUE_ATTEMPTS):
+            frame = self.camera.dequeue(poll=False)
+            if frame is not None:
+                return frame
+            time.sleep(self.DEQUEUE_DELAY)
+        return None
+
+    def _decode_frame(self, raw_bytes):
+        n_pixels = len(raw_bytes) // 2
+        w, h = self._width, self._height
+
+        if w * h != n_pixels:
+            logger.warning("Несоответствие: буфер=%d пикс, ожидается %dx%d=%d",
+                           n_pixels, w, h, w * h)
+            if n_pixels > 0:
+                side = int(math.sqrt(n_pixels))
+                w = side
+                h = n_pixels // side
+            else:
+                return None
+
+        try:
+            arr = np.frombuffer(raw_bytes, dtype=self._byte_order).reshape((h, w))
+            return arr.copy()
+        except Exception as e:
+            logger.error("Ошибка декодирования кадра: %s", e)
+            return None
+
     def capture_single_frame(self):
         """
-        Захватывает один кадр с камеры
-        
+        Захватывает один кадр.
+
         Returns:
-            Двумерный массив значений светимости или None в случае ошибки
+            numpy array (height, width) dtype=uint16 или None
         """
         if not self.is_connected or self.camera is None:
-            logger.warning("Попытка захвата кадра при отсутствии подключения к камере")
-            print("Попытка захвата кадра при отсутствии подключения к камере")
             return None
-            
+
         try:
             with self.lock:
-                if self.use_trigger:
-                    # В режиме внешнего триггера ожидаем кадр
-                    logger.info("Ожидание кадра по внешнему триггеру...")
-                    print("Ожидание кадра по внешнему триггеру...")
-                    frame = self.camera.dequeue()  # Вызываем без таймаута
-                else:
-                    # В режиме без триггера явно запускаем захват
-                    logger.info("Запуск захвата одиночного кадра")
-                    print("Запуск захвата одиночного кадра")
-                    self.camera.start_one_shot()
-                    frame = self.camera.dequeue()  # Вызываем без таймаута
-                
-                # Копируем данные кадра
-                frame_data = frame.copy()
-                
-                # Преобразуем в numpy массив, если необходимо
-                if not isinstance(frame_data, np.ndarray):
-                    frame_data = np.array(frame_data)
-                
-                # Возвращаем кадр в очередь
+                frame = self._dequeue_with_retry()
+                if frame is None:
+                    logger.warning("Не удалось получить кадр (таймаут)")
+                    return None
+
+                raw = bytes(frame)
                 frame.enqueue()
-                
-                # Останавливаем режим захвата одного кадра, если не используем триггер
-                if not self.use_trigger:
-                    self.camera.stop_one_shot()
-                
-                logger.info("Кадр успешно захвачен, размер: %s", frame_data.shape)
-                print("Кадр успешно захвачен, размер: {}".format(frame_data.shape))
-                return frame_data
+
+                arr = self._decode_frame(raw)
+                if arr is not None:
+                    logger.debug("Кадр захвачен: %s, min=%d, max=%d",
+                                 arr.shape, arr.min(), arr.max())
+                return arr
+
         except Exception as e:
             logger.error("Ошибка при захвате кадра: %s", e, exc_info=True)
-            print("Ошибка при захвате кадра: {}".format(e))
             return None
-    
+
     def capture_background_frames(self, num_frames=40):
         """
-        Захватывает несколько кадров для фона
-        
-        Args:
-            num_frames: Количество кадров для захвата
-            
+        Захватывает num_frames кадров для усреднения фона.
+
         Returns:
-            Трехмерный массив кадров фона или None в случае ошибки
+            numpy array (num_frames, height, width) dtype=float64 или None
         """
         if not self.is_connected or self.camera is None:
-            logger.warning("Попытка захвата фоновых кадров при отсутствии подключения к камере")
-            print("Попытка захвата фоновых кадров при отсутствии подключения к камере")
             return None
-            
+
         frames = []
-        
         try:
-            logger.info("Начало сбора фоновых кадров, количество: %d", num_frames)
-            print("Начало сбора фоновых кадров, количество: {}".format(num_frames))
-            for i in range(num_frames):
-                # Захватываем кадр
-                frame = self.capture_single_frame()
-                if frame is not None:
-                    frames.append(frame)
-                
-                # Задержка между кадрами
-                time.sleep(0.25)
-                
-                # Вывод прогресса
-                logger.info("Захвачено кадров: %d/%d", i+1, num_frames)
-                print("Захвачено кадров: {}/{}".format(i+1, num_frames), end="\r")
-                
-                # Если собрали достаточно кадров или процесс был прерван
-                if len(frames) >= num_frames:
-                    break
-            
-            print()  # Новая строка после прогресса
-            
-            # Преобразуем список кадров в трехмерный массив numpy
+            logger.info("Сбор %d фоновых кадров...", num_frames)
+            captured = 0
+
+            while captured < num_frames:
+                with self.lock:
+                    frame = self._dequeue_with_retry()
+                    if frame is None:
+                        logger.warning("Пропущен кадр %d/%d", captured + 1, num_frames)
+                        continue
+                    raw = bytes(frame)
+                    frame.enqueue()
+
+                arr = self._decode_frame(raw)
+                if arr is not None:
+                    frames.append(arr.astype(np.float64))
+                    captured += 1
+                    logger.debug("Фоновый кадр %d/%d", captured, num_frames)
+
             if frames:
-                logger.info("Сбор фоновых кадров завершен, всего кадров: %d", len(frames))
-                print("Сбор фоновых кадров завершен, всего кадров: {}".format(len(frames)))
-                return np.array(frames)
-            
+                result = np.array(frames)
+                logger.info("Фон собран: %d кадров, shape=%s", len(frames), result.shape)
+                return result
+
             logger.warning("Не удалось собрать фоновые кадры")
-            print("Не удалось собрать фоновые кадры")
             return None
-            
+
         except Exception as e:
-            logger.error("Ошибка при захвате кадров фона: %s", e, exc_info=True)
-            print("Ошибка при захвате кадров фона: {}".format(e))
+            logger.error("Ошибка при сборе фона: %s", e, exc_info=True)
+            if frames:
+                return np.array(frames)
             return None
+
+    # ── Свойства ──────────────────────────────────────────────────────────────
+
+    @property
+    def resolution(self):
+        return (self._width, self._height)
+
+    @property
+    def pixel_size_x(self):
+        return self._pixel_size_x
+
+    @property
+    def pixel_size_y(self):
+        return self._pixel_size_y
