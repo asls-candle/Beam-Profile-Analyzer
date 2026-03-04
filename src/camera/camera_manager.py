@@ -110,11 +110,18 @@ def _decode_vendor_model(camera):
 
 def _make_camera_display_name(vendor, model, guid_str):
     """
-    Формирует отображаемое имя камеры:
-    «Vendor Model (GUID_последние8)»
+    Формирует два варианта отображаемого имени камеры:
+
+    - short_name: «Model (GUID_последние8)»   — для UI-виджетов
+    - full_name:  «Vendor Model (GUID_последние8)»  — для тултипов
+
+    Returns:
+        (short_name, full_name)
     """
     short_guid = guid_str[-8:] if len(guid_str) >= 8 else guid_str
-    return "{} {} ({})".format(vendor, model, short_guid)
+    short_name = "{} ({})".format(model, short_guid)
+    full_name  = "{} {} ({})".format(vendor, model, short_guid)
+    return short_name, full_name
 
 
 class CameraManager:
@@ -190,7 +197,7 @@ class CameraManager:
         self._pixel_size_y = self.DEFAULT_PIXEL_SIZE
         self._video_started = False
 
-        # Словарь обнаруженных камер: display_name -> info dict
+        # Словарь обнаруженных камер: short_name -> info dict
         self.cameras = {}
 
         logger.info("Инициализация CameraManager, use_trigger=%s, use_format7=%s",
@@ -203,7 +210,7 @@ class CameraManager:
         Обнаруживает все подключённые FireWire-камеры.
 
         Returns:
-            Список отображаемых имён обнаруженных камер
+            Список коротких отображаемых имён обнаруженных камер
         """
         if not CAMERA_AVAILABLE:
             logger.warning("pydc1394 не доступен")
@@ -220,7 +227,7 @@ class CameraManager:
 
             for i, cam_entry in enumerate(hw_cameras):
                 cam_guid = cam_entry[0]
-                guid_str = str(cam_guid)
+                guid_str = format(int(cam_guid), '016x')
 
                 vendor, model = "Unknown", "Unknown"
                 resolution = (0, 0)
@@ -233,28 +240,30 @@ class CameraManager:
                 except Exception as e:
                     logger.warning("Не удалось получить информацию о камере %d: %s", i, e)
 
-                display_name = _make_camera_display_name(vendor, model, guid_str)
+                short_name, full_name = _make_camera_display_name(vendor, model, guid_str)
 
                 # Два устройства с одинаковым именем — добавляем индекс
-                if display_name in self.cameras:
-                    display_name = "{} [{}]".format(display_name, i)
+                if short_name in self.cameras:
+                    short_name = "{} [{}]".format(short_name, i)
+                    full_name  = "{} [{}]".format(full_name, i)
 
                 pixel_size = self.PIXEL_SIZE_BY_RESOLUTION.get(
                     resolution, self.DEFAULT_PIXEL_SIZE)
 
-                self.cameras[display_name] = {
-                    "guid":         cam_guid,
-                    "guid_str":     guid_str,
-                    "vendor":       vendor,
-                    "model":        model,
-                    "camera_name":  display_name,
-                    "resolution":   resolution,
-                    "pixel_size_x": pixel_size,
-                    "pixel_size_y": pixel_size,
+                self.cameras[short_name] = {
+                    "guid":              cam_guid,
+                    "guid_str":          guid_str,
+                    "vendor":            vendor,
+                    "model":             model,
+                    "camera_name":       short_name,
+                    "camera_full_name":  full_name,
+                    "resolution":        resolution,
+                    "pixel_size_x":      pixel_size,
+                    "pixel_size_y":      pixel_size,
                 }
 
-                logger.info("Обнаружена камера: %s, GUID=%s, разрешение=%s",
-                            display_name, guid_str, resolution)
+                logger.info("Обнаружена камера: %s | %s, GUID=%s, разрешение=%s",
+                            short_name, full_name, guid_str, resolution)
 
             return list(self.cameras.keys())
 
@@ -306,7 +315,7 @@ class CameraManager:
         Возвращает информацию о камере.
 
         Args:
-            camera_name: Имя камеры. Если None — текущая подключённая.
+            camera_name: Короткое имя камеры. Если None — текущая подключённая.
 
         Returns:
             Словарь с информацией или None
@@ -325,7 +334,7 @@ class CameraManager:
         настраивает экспозицию и триггер, запускает поток.
 
         Args:
-            camera_name: Имя из get_camera_list()
+            camera_name: Короткое имя из get_camera_list()
 
         Returns:
             True если успешно

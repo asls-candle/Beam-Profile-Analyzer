@@ -77,7 +77,8 @@ class CameraTab(QWidget):
 
         self.camera_combo = QComboBox()
         self.camera_combo.addItem("Not selected")
-        self.camera_combo.addItems(self.main_window.camera_manager.get_camera_list())
+        self._populate_camera_combo(
+            self.main_window.camera_manager.get_camera_list())
 
         self.refresh_cameras_btn = QPushButton("Refresh")
         self.refresh_cameras_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
@@ -104,10 +105,12 @@ class CameraTab(QWidget):
         camera_info_layout.setSpacing(4)
 
         self.camera_name_label = QLabel("Name: -")
+        self.camera_id_label = QLabel("ID: -")
         self.camera_resolution_label = QLabel("Resolution: -")
         self.camera_pixel_size_label = QLabel("Pixel size: -")
 
         camera_info_layout.addWidget(self.camera_name_label)
+        camera_info_layout.addWidget(self.camera_id_label)
         camera_info_layout.addWidget(self.camera_resolution_label)
         camera_info_layout.addWidget(self.camera_pixel_size_label)
 
@@ -236,6 +239,13 @@ class CameraTab(QWidget):
 
         self.camera_radio.setChecked(True)
 
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _populate_camera_combo(self, camera_list):
+        """Добавляет камеры в комбобокс."""
+        for name in camera_list:
+            self.camera_combo.addItem(name)
+
     # ── UI state ──────────────────────────────────────────────────────────────
 
     def update_ui_state(self):
@@ -257,7 +267,6 @@ class CameraTab(QWidget):
             self.launch_camera_btn.setEnabled(not camera_connected)
             self.stop_camera_btn.setEnabled(camera_connected)
 
-
             has_background = self.main_window.image_reader.background is not None
             is_collecting_bg = self.main_window.image_reader.is_collecting_background
 
@@ -272,8 +281,8 @@ class CameraTab(QWidget):
 
             if camera_connected:
                 camera_info = self.main_window.camera_manager.get_camera_info()
-                name = camera_info.get('camera_name', 'Connected') if camera_info else 'Connected'
-                self.camera_status_label.setText("Camera: {}".format(name))
+                short_name = camera_info.get('camera_name', 'Connected') if camera_info else 'Connected'
+                self.camera_status_label.setText("Camera: {}".format(short_name))
             else:
                 self.camera_status_label.setText("Camera: Not connected")
 
@@ -307,6 +316,7 @@ class CameraTab(QWidget):
 
         if is_camera_mode and not self.main_window.camera_manager.is_connected:
             self.camera_name_label.setText("Name: -")
+            self.camera_id_label.setText("ID: -")
             self.camera_resolution_label.setText("Resolution: -")
             self.camera_pixel_size_label.setText("Pixel size: -")
             return
@@ -314,7 +324,10 @@ class CameraTab(QWidget):
         camera_info = self.main_window.get_camera_info()
         if camera_info:
             self.camera_name_label.setText(
-                "Name: {}".format(camera_info.get('camera_name', '-')))
+                "Name: {}".format(camera_info.get('model', '-')))
+            self.camera_id_label.setText(
+                "ID: {}".format(camera_info.get('guid_str', '-')))
+
             resolution = camera_info.get("resolution", (0, 0))
             self.camera_resolution_label.setText(
                 "Resolution: {} x {}".format(resolution[0], resolution[1]))
@@ -324,6 +337,7 @@ class CameraTab(QWidget):
                 "Pixel size: {:.8f} x {:.8f} mm".format(px, py))
         else:
             self.camera_name_label.setText("Name: -")
+            self.camera_id_label.setText("ID: -")
             self.camera_resolution_label.setText("Resolution: -")
             self.camera_pixel_size_label.setText("Pixel size: -")
 
@@ -432,7 +446,7 @@ class CameraTab(QWidget):
         self.camera_combo.clear()
         self.camera_combo.addItem("Not selected")
         camera_list = self.main_window.camera_manager.get_camera_list()
-        self.camera_combo.addItems(camera_list)
+        self._populate_camera_combo(camera_list)
         # Restore previous selection if still present
         idx = self.camera_combo.findText(current_text)
         self.camera_combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -450,7 +464,6 @@ class CameraTab(QWidget):
     def on_stop_camera(self):
         if not self.main_window.disconnect_camera():
             QMessageBox.critical(self, "Error", "Failed to disconnect from camera.")
-
 
     def on_get_background(self):
         frames_count = self.bg_frames_spinbox.value()
