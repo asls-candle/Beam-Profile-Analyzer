@@ -110,7 +110,7 @@ def _decode_vendor_model(camera):
 
 def _make_camera_display_name(vendor, model, guid_str):
     """
-    Формирует отображаемое имя камеры по аналогии с claude_shot:
+    Формирует отображаемое имя камеры:
     «Vendor Model (GUID_последние8)»
     """
     short_guid = guid_str[-8:] if len(guid_str) >= 8 else guid_str
@@ -122,11 +122,19 @@ class CameraManager:
     Менеджер камер с полностью динамическим обнаружением.
 
     Никаких предустановленных камер нет. Имена формируются из
-    vendor/model/GUID как в claude_shot. Размер пикселя определяется
-    автоматически по разрешению сенсора (PIXEL_SIZE_BY_RESOLUTION).
+    vendor/model/GUID. Размер пикселя определяется автоматически
+    по разрешению сенсора (PIXEL_SIZE_BY_RESOLUTION).
 
     Для каждой камеры автоматически выбирается максимальное разрешение
     в монохромном 16-битном режиме (FORMAT7_0 → Y16/MONO16).
+
+    Поддержка внешнего триггера (IIDC 1394):
+      - Триггер настраивается числовыми константами IIDC, а не строками.
+      - При use_trigger=True прогрев и автоопределение byte order
+        пропускаются (камера не генерирует кадры без сигнала).
+      - Переключение триггера на лету выполняется с остановкой/стартом
+        видеопотока, как того требует стандарт IIDC.
+      - capture_single_frame() явно различает «нет сигнала» и «ошибка».
     """
 
     # Настройки экспозиции по умолчанию
@@ -145,10 +153,19 @@ class CameraManager:
         (1624, 1224): 0.01875468,
     }
 
-    CAPTURE_BUFSIZE = 8
-    WARMUP_FRAMES = 5
+    # Параметры внешнего триггера по умолчанию (IIDC 1394)
+    TRIGGER_MODE     = 0   # Mode 0 — стандартный: экспозиция по длительности сигнала
+    TRIGGER_SOURCE   = 0   # GPIO pin 0 (у Flea2 — разъём GPIO)
+    TRIGGER_POLARITY = 1   # 1 = активный HIGH, 0 = активный LOW
+
+    CAPTURE_BUFSIZE  = 8
+    WARMUP_FRAMES    = 5
     DEQUEUE_ATTEMPTS = 30
-    DEQUEUE_DELAY = 0.05
+    DEQUEUE_DELAY    = 0.05
+
+    # При use_trigger=True ждём кадр дольше — сигнал может прийти позже
+    TRIGGER_DEQUEUE_ATTEMPTS = 200   # 200 × 0.05 с = 10 секунд
+    TRIGGER_DEQUEUE_DELAY    = 0.05
 
     def __init__(self, use_trigger=False, use_format7=True, manual_exposure=True):
         """
@@ -168,7 +185,7 @@ class CameraManager:
 
         self._width = 0
         self._height = 0
-        self._byte_order = '>u2'
+        self._byte_order = '>u2'   # Flea2 — big-endian по умолчанию
         self._pixel_size_x = self.DEFAULT_PIXEL_SIZE
         self._pixel_size_y = self.DEFAULT_PIXEL_SIZE
         self._video_started = False
@@ -184,9 +201,6 @@ class CameraManager:
     def get_camera_list(self):
         """
         Обнаруживает все подключённые FireWire-камеры.
-
-        Имя каждой камеры формируется как «Vendor Model (GUID_short)»
-        — никаких предустановленных имён и параметров нет.
 
         Returns:
             Список отображаемых имён обнаруженных камер
@@ -219,10 +233,9 @@ class CameraManager:
                 except Exception as e:
                     logger.warning("Не удалось получить информацию о камере %d: %s", i, e)
 
-                # Уникальное имя на основе реальных данных камеры
                 display_name = _make_camera_display_name(vendor, model, guid_str)
 
-                # Если вдруг два устройства дали одинаковое имя — добавляем индекс
+                # Два устройства с одинаковым именем — добавляем индекс
                 if display_name in self.cameras:
                     display_name = "{} [{}]".format(display_name, i)
 
@@ -230,12 +243,12 @@ class CameraManager:
                     resolution, self.DEFAULT_PIXEL_SIZE)
 
                 self.cameras[display_name] = {
-                    "guid": cam_guid,
-                    "guid_str": guid_str,
-                    "vendor": vendor,
-                    "model": model,
-                    "camera_name": display_name,
-                    "resolution": resolution,
+                    "guid":         cam_guid,
+                    "guid_str":     guid_str,
+                    "vendor":       vendor,
+                    "model":        model,
+                    "camera_name":  display_name,
+                    "resolution":   resolution,
                     "pixel_size_x": pixel_size,
                     "pixel_size_y": pixel_size,
                 }
@@ -255,9 +268,6 @@ class CameraManager:
 
         Приоритет: FORMAT7_0 (max_image_size) → лучший Y16/MONO16.
 
-        Args:
-            camera: Временный объект Camera для чтения режимов
-
         Returns:
             (width, height)
         """
@@ -268,7 +278,6 @@ class CameraManager:
         except Exception:
             return (0, 0)
 
-        # 1. FORMAT7_0 — обычно возвращает полный сенсор
         fmt7 = [m for m in all_modes if 'FORMAT7_0' in str(m)]
         if fmt7:
             mode = fmt7[0]
@@ -282,7 +291,6 @@ class CameraManager:
                 except Exception:
                     pass
 
-        # 2. Перебираем Y16/MONO16 — берём наибольшее разрешение
         for m in all_modes:
             if _is_mono16(m):
                 w, h = _get_image_size(m)
@@ -301,7 +309,7 @@ class CameraManager:
             camera_name: Имя камеры. Если None — текущая подключённая.
 
         Returns:
-            Словарь с информацией о камере или None
+            Словарь с информацией или None
         """
         if camera_name is None:
             camera_name = self.camera_name
@@ -309,13 +317,12 @@ class CameraManager:
             return None
         return self.cameras.get(camera_name)
 
-
     # ── Подключение / отключение ──────────────────────────────────────────────
 
     def connect_to_camera(self, camera_name):
         """
         Подключается к камере: выбирает максимальный mono16-режим,
-        настраивает экспозицию, запускает поток.
+        настраивает экспозицию и триггер, запускает поток.
 
         Args:
             camera_name: Имя из get_camera_list()
@@ -345,7 +352,6 @@ class CameraManager:
                 self.context = Context()
                 self.camera = Camera(guid=cam_guid)
 
-                # Выбираем режим с максимальным разрешением
                 width, height = self._select_and_apply_mode()
 
                 if width == 0 or height == 0:
@@ -356,8 +362,6 @@ class CameraManager:
                 self._width = width
                 self._height = height
 
-                # Берём pixel_size из словаря (мог быть задан пользователем)
-                # Обновляем разрешение и пересчитываем pixel_size по реальному разрешению
                 cam_info["resolution"] = (width, height)
                 pixel_size = self.PIXEL_SIZE_BY_RESOLUTION.get(
                     (width, height), self.DEFAULT_PIXEL_SIZE)
@@ -367,6 +371,8 @@ class CameraManager:
                 self._pixel_size_y = pixel_size
 
                 self._configure_exposure()
+
+                # Триггер настраивается ДО старта захвата — требование IIDC
                 self._configure_trigger()
 
                 time.sleep(0.3)
@@ -376,14 +382,23 @@ class CameraManager:
                 self._video_started = True
                 time.sleep(0.5)
 
-                self._flush_warmup_frames()
-                self._detect_byte_order()
+                # При внешнем триггере прогрев пропускается:
+                # камера не генерирует кадры без входного сигнала
+                if not self.use_trigger:
+                    self._flush_warmup_frames()
+                    self._detect_byte_order()
+                else:
+                    logger.info(
+                        "Режим внешнего триггера: прогрев и автоопределение "
+                        "byte order пропущены. Byte order: big-endian (Flea2 default)."
+                    )
+                    self._byte_order = '>u2'
 
                 self.camera_name = camera_name
                 self.is_connected = True
 
-                logger.info("Камера '%s' подключена: %dx%d, byte_order=%s",
-                            camera_name, width, height, self._byte_order)
+                logger.info("Камера '%s' подключена: %dx%d, trigger=%s, byte_order=%s",
+                            camera_name, width, height, self.use_trigger, self._byte_order)
                 return True
 
         except Exception as e:
@@ -447,7 +462,6 @@ class CameraManager:
         all_modes = list(self.camera.modes)
         logger.info("Доступные видеорежимы: %s", [str(m) for m in all_modes])
 
-        # 1. FORMAT7_0 — полный сенсор
         if self.use_format7:
             fmt7 = [m for m in all_modes if 'FORMAT7_0' in str(m)]
             if fmt7:
@@ -472,7 +486,6 @@ class CameraManager:
                 else:
                     logger.warning("FORMAT7_0 найден, но размер не определён — fallback на Y16")
 
-        # 2. Лучший Y16/MONO16 по разрешению
         y16_modes = [m for m in all_modes if _is_mono16(m)]
         if not y16_modes:
             logger.error("Нет доступных Y16/MONO16 режимов")
@@ -524,7 +537,7 @@ class CameraManager:
         except Exception as e:
             logger.warning("  FORMAT7 packet size: ошибка (%s)", e)
 
-    # ── Экспозиция и триггер ──────────────────────────────────────────────────
+    # ── Экспозиция ────────────────────────────────────────────────────────────
 
     def _configure_exposure(self):
         if self.manual_exposure:
@@ -538,25 +551,6 @@ class CameraManager:
             _apply_feature(self.camera, 'shutter',  0, mode='auto')
             _apply_feature(self.camera, 'gain',     0, mode='auto')
 
-    def _configure_trigger(self):
-        try:
-            if self.use_trigger:
-                self.camera.trigger_mode = 'external'
-                self.camera.trigger_source = 0
-                logger.info("Внешний триггер, источник: 0")
-            else:
-                if hasattr(self.camera, 'trigger_mode'):
-                    self.camera.trigger_mode = 'internal'
-                    logger.info("Триггер: internal")
-        except Exception as e:
-            logger.warning("Ошибка настройки триггера: %s", e)
-
-    def set_trigger_mode(self, use_trigger):
-        self.use_trigger = use_trigger
-        if self.is_connected and self.camera is not None:
-            self._configure_trigger()
-        return True
-
     def set_exposure(self, shutter=None, gain=None, exposure=None):
         if not self.is_connected or self.camera is None:
             return
@@ -567,9 +561,113 @@ class CameraManager:
         if exposure is not None:
             _apply_feature(self.camera, 'exposure', exposure, mode='manual')
 
+    # ── Триггер ───────────────────────────────────────────────────────────────
+
+    def _configure_trigger(self):
+        """
+        Настраивает триггер по стандарту IIDC 1394 числовыми константами.
+
+        Flea2 FL2-08S2M поддерживает:
+          Mode 0  — стандартный: одиночный кадр на фронт/спад сигнала
+          Mode 1  — bulk: захват N кадров за один сигнал
+          Mode 3  — skip: пропуск N кадров между сигналами
+          Mode 14 — overlap: разрешает перекрытие экспозиции и readout
+          Mode 15 — multi-shot: захват N кадров с интервалом
+
+        Полярность: 1 = активный HIGH (RISING), 0 = активный LOW (FALLING).
+        Источник 0 соответствует GPIO pin 0 (разъём GPIO Flea2).
+        """
+        try:
+            trig = self.camera.trigger
+        except AttributeError:
+            logger.warning("Объект trigger недоступен на этой камере")
+            return
+
+        if self.use_trigger:
+            try:
+                trig.mode     = self.TRIGGER_MODE
+                trig.source   = self.TRIGGER_SOURCE
+                trig.polarity = self.TRIGGER_POLARITY
+                trig.active   = True
+                logger.info(
+                    "Внешний триггер активирован: mode=%d, source=%d, polarity=%d",
+                    self.TRIGGER_MODE, self.TRIGGER_SOURCE, self.TRIGGER_POLARITY
+                )
+            except Exception as e:
+                logger.warning("Ошибка активации триггера: %s", e)
+        else:
+            try:
+                trig.active = False
+                logger.info("Внешний триггер деактивирован")
+            except Exception as e:
+                logger.warning("Ошибка деактивации триггера: %s", e)
+
+    def set_trigger_mode(self, use_trigger):
+        """
+        Переключает режим триггера на лету.
+
+        Согласно требованиям IIDC 1394 изменение параметров триггера
+        требует остановки и повторного запуска видеопотока.
+
+        Args:
+            use_trigger: True — внешний триггер, False — свободный захват
+        """
+        self.use_trigger = use_trigger
+
+        if not (self.is_connected and self.camera is not None):
+            return True
+
+        with self.lock:
+            try:
+                # Останавливаем поток перед изменением параметров триггера
+                if self._video_started:
+                    self.camera.stop_video()
+                    self._video_started = False
+                    logger.info("Видеопоток остановлен для изменения триггера")
+
+                self._configure_trigger()
+
+                # Перезапускаем поток
+                self.camera.start_video()
+                self._video_started = True
+                time.sleep(0.3)
+                logger.info("Видеопоток перезапущен, use_trigger=%s", use_trigger)
+
+            except Exception as e:
+                logger.error("Ошибка при переключении триггера: %s", e, exc_info=True)
+                return False
+
+        return True
+
+    def set_trigger_parameters(self, mode=None, source=None, polarity=None):
+        """
+        Задаёт параметры внешнего триггера и применяет их если камера подключена.
+
+        Args:
+            mode:     Режим триггера IIDC (0, 1, 3, 14, 15)
+            source:   Источник сигнала — номер GPIO pin (0–3 для Flea2)
+            polarity: Полярность: 1=HIGH активный, 0=LOW активный
+        """
+        if mode is not None:
+            self.TRIGGER_MODE = mode
+        if source is not None:
+            self.TRIGGER_SOURCE = source
+        if polarity is not None:
+            self.TRIGGER_POLARITY = polarity
+
+        logger.info(
+            "Параметры триггера обновлены: mode=%d, source=%d, polarity=%d",
+            self.TRIGGER_MODE, self.TRIGGER_SOURCE, self.TRIGGER_POLARITY
+        )
+
+        # Если камера работает в режиме триггера — применяем немедленно
+        if self.is_connected and self.use_trigger:
+            self.set_trigger_mode(use_trigger=True)
+
     # ── Прогрев и byte order ──────────────────────────────────────────────────
 
     def _flush_warmup_frames(self):
+        """Сбрасывает первые кадры после старта (только в режиме свободного захвата)"""
         logger.info("Сброс %d прогревочных кадров...", self.WARMUP_FRAMES)
         for _ in range(self.WARMUP_FRAMES):
             frame = self.camera.dequeue(poll=False)
@@ -578,12 +676,17 @@ class CameraManager:
 
     def _detect_byte_order(self):
         """
-        Определяет порядок байт по первому кадру:
-        сравнивает число насыщенных пикселей при BE и LE интерпретации.
+        Определяет порядок байт по первому кадру: сравнивает число
+        насыщенных пикселей при BE и LE интерпретации.
+
+        Вызывается только в режиме свободного захвата (не триггерном).
+        Для Flea2 результат, как правило, всегда big-endian.
         """
-        frame = self._dequeue_with_retry()
+        frame = self._dequeue_with_retry(use_trigger_timeout=False)
         if frame is None:
-            logger.warning("Не удалось получить кадр для определения byte order")
+            logger.warning("Не удалось получить кадр для определения byte order — "
+                           "используется big-endian по умолчанию")
+            self._byte_order = '>u2'
             return
 
         raw = bytes(frame)
@@ -617,12 +720,33 @@ class CameraManager:
 
     # ── Захват кадров ─────────────────────────────────────────────────────────
 
-    def _dequeue_with_retry(self):
-        for _ in range(self.DEQUEUE_ATTEMPTS):
+    def _dequeue_with_retry(self, use_trigger_timeout=None):
+        """
+        Пытается получить кадр из буфера камеры.
+
+        Args:
+            use_trigger_timeout: Если True — использует увеличенный таймаут
+                для режима внешнего триггера. Если None — берёт из self.use_trigger.
+
+        Returns:
+            Объект кадра или None при таймауте
+        """
+        if use_trigger_timeout is None:
+            use_trigger_timeout = self.use_trigger
+
+        if use_trigger_timeout:
+            attempts = self.TRIGGER_DEQUEUE_ATTEMPTS
+            delay    = self.TRIGGER_DEQUEUE_DELAY
+        else:
+            attempts = self.DEQUEUE_ATTEMPTS
+            delay    = self.DEQUEUE_DELAY
+
+        for _ in range(attempts):
             frame = self.camera.dequeue(poll=False)
             if frame is not None:
                 return frame
-            time.sleep(self.DEQUEUE_DELAY)
+            time.sleep(delay)
+
         return None
 
     def _decode_frame(self, raw_bytes):
@@ -650,17 +774,32 @@ class CameraManager:
         """
         Захватывает один кадр.
 
+        В режиме внешнего триггера ожидает сигнала до 10 секунд
+        (TRIGGER_DEQUEUE_ATTEMPTS × TRIGGER_DEQUEUE_DELAY).
+
         Returns:
-            numpy array (height, width) dtype=uint16 или None
+            numpy array (height, width) dtype=uint16
+            None при таймауте ожидания триггерного сигнала
+            None при ошибке
         """
         if not self.is_connected or self.camera is None:
+            logger.error("capture_single_frame: камера не подключена")
             return None
 
         try:
             with self.lock:
                 frame = self._dequeue_with_retry()
+
                 if frame is None:
-                    logger.warning("Не удалось получить кадр (таймаут)")
+                    if self.use_trigger:
+                        logger.warning(
+                            "Нет кадра: внешний триггерный сигнал не получен "
+                            "за %.1f с (attempts=%d)",
+                            self.TRIGGER_DEQUEUE_ATTEMPTS * self.TRIGGER_DEQUEUE_DELAY,
+                            self.TRIGGER_DEQUEUE_ATTEMPTS
+                        )
+                    else:
+                        logger.warning("Нет кадра: таймаут ожидания (камера не отвечает)")
                     return None
 
                 raw = bytes(frame)
@@ -680,6 +819,9 @@ class CameraManager:
         """
         Захватывает num_frames кадров для усреднения фона.
 
+        В режиме внешнего триггера каждый кадр ожидается отдельно
+        с увеличенным таймаутом.
+
         Returns:
             numpy array (num_frames, height, width) dtype=float64 или None
         """
@@ -688,14 +830,35 @@ class CameraManager:
 
         frames = []
         try:
-            logger.info("Сбор %d фоновых кадров...", num_frames)
+            logger.info("Сбор %d фоновых кадров (trigger=%s)...",
+                        num_frames, self.use_trigger)
             captured = 0
+            misses = 0
+            max_misses = num_frames * 3  # не более 3 пропусков на каждый ожидаемый кадр
 
             while captured < num_frames:
                 with self.lock:
                     frame = self._dequeue_with_retry()
                     if frame is None:
-                        logger.warning("Пропущен кадр %d/%d", captured + 1, num_frames)
+                        misses += 1
+                        if self.use_trigger:
+                            logger.warning(
+                                "Кадр %d/%d: триггерный сигнал не получен "
+                                "(пропуск %d/%d)",
+                                captured + 1, num_frames, misses, max_misses
+                            )
+                        else:
+                            logger.warning(
+                                "Пропущен кадр %d/%d (пропуск %d/%d)",
+                                captured + 1, num_frames, misses, max_misses
+                            )
+                        if misses >= max_misses:
+                            logger.error(
+                                "Превышен лимит пропусков (%d) — "
+                                "прерывание сбора фона. Собрано %d/%d кадров.",
+                                max_misses, captured, num_frames
+                            )
+                            break
                         continue
                     raw = bytes(frame)
                     frame.enqueue()

@@ -1,3 +1,5 @@
+# src/ui/camera_tab.py
+
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QComboBox, QRadioButton, QButtonGroup,
                              QSpinBox, QGroupBox, QMessageBox)
