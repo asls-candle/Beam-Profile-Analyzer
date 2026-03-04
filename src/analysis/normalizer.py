@@ -1,3 +1,5 @@
+# src.analysis.normalizer.py
+
 import numpy as np
 import logging
 
@@ -64,7 +66,7 @@ class ImageNormalizer:
         normalized = (image_float - min_val) / (max_val - min_val)
         
         # Ограничиваем значения в диапазоне [0, 1] на случай, если image выходит за пределы reference
-        normalized = np.clip(normalized, 0, 1)
+        # normalized = np.clip(normalized, 0, 1)
         
         logger.debug("Нормализация массива завершена успешно")
         

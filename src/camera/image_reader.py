@@ -1,3 +1,5 @@
+# src.camera.image_reader.py
+
 import numpy as np
 from threading import Thread, Event, Lock
 import time
@@ -304,11 +306,11 @@ class ImageReader:
             return False
             
         # Вычитаем необработанный фон из необработанного кадра
-        raw_diff = self.raw_current_frame - self.raw_background
+        raw_diff = self.raw_current_frame.astype(np.float64) - self.raw_background.astype(np.float64)
         
         # Обрезаем отрицательные значения
         raw_diff[raw_diff < 0] = 0
         
         # Нормализуем результат, используя текущий кадр как референс
-        self.difference = ImageNormalizer.normalize(raw_diff, reference_image=self.raw_current_frame)
+        self.difference = ImageNormalizer.normalize(raw_diff)
         return True

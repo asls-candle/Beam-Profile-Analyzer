@@ -1,3 +1,5 @@
+# src.ui.main_window.py
+
 from PyQt5.QtWidgets import (QMainWindow, QTabWidget, QMessageBox, 
                            QFileDialog, QVBoxLayout, QWidget)
 from PyQt5.QtCore import QSettings

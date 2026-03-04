@@ -105,6 +105,9 @@ class CameraTab(QWidget):
         self.camera_resolution_label = QLabel("Resolution: -")
         self.camera_pixel_size_label = QLabel("Pixel size: -")
 
+        camera_info_layout.addWidget(self.camera_name_label)
+        camera_info_layout.addWidget(self.camera_resolution_label)
+        camera_info_layout.addWidget(self.camera_pixel_size_label)
 
         # Background collection
         background_panel = QGroupBox("Background Collection")

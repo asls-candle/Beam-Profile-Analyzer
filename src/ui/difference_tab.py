@@ -1,3 +1,5 @@
+# src.ui.difference_tab.py
+
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QSplitter, QGridLayout
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont

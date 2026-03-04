@@ -1,3 +1,5 @@
+
+# src.analysis.filters.py
 import numpy as np
 from scipy.ndimage import median_filter as scipy_median_filter
 
