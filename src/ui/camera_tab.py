@@ -159,20 +159,6 @@ class CameraTab(QWidget):
         placeholder_label.setStyleSheet("color: grey; font-style: italic;")
         capture_layout.addWidget(placeholder_label)
 
-        # Status
-        status_panel = QGroupBox("Status")
-        status_panel.setMinimumWidth(120)
-        status_layout = QVBoxLayout(status_panel)
-        status_layout.setSpacing(5)
-
-        self.mode_status_label = QLabel("Mode: Camera")
-        self.camera_status_label = QLabel("Camera: Not connected")
-        self.capture_status_label = QLabel("Data collection: Stopped")
-
-        status_layout.addWidget(self.mode_status_label)
-        status_layout.addWidget(self.camera_status_label)
-        status_layout.addWidget(self.capture_status_label)
-
         # Beam information
         beam_info_panel = QGroupBox("Beam Information")
         beam_info_panel.setMinimumWidth(140)
@@ -201,7 +187,11 @@ class CameraTab(QWidget):
         top_panel.addWidget(camera_info_panel, 1)
         top_panel.addWidget(background_panel, 1)
         top_panel.addWidget(capture_panel, 1)
-        top_panel.addWidget(status_panel, 1)
+        empty_panel = QGroupBox()
+        empty_panel.setMinimumWidth(120)
+        empty_panel.setStyleSheet("border: none; background-color: transparent;")
+        QVBoxLayout(empty_panel)
+        top_panel.addWidget(empty_panel, 1)
         top_panel.addWidget(beam_info_panel, 1)
 
         # ── Plot area ─────────────────────────────────────────────────────────
@@ -245,8 +235,6 @@ class CameraTab(QWidget):
 
         self.camera_radio.setChecked(is_camera_mode)
         self.file_radio.setChecked(not is_camera_mode)
-        self.mode_status_label.setText(
-            "Mode: {}".format('Camera' if is_camera_mode else 'File Reading'))
 
         self.open_file_btn.setEnabled(not is_camera_mode)
 
@@ -265,18 +253,6 @@ class CameraTab(QWidget):
             self.get_background_btn.setEnabled(camera_connected and not is_collecting_bg)
             self.stop_bg_collection_btn.setEnabled(camera_connected and is_collecting_bg)
 
-            if camera_connected:
-                camera_info = self.main_window.camera_manager.get_camera_info()
-                short_name = camera_info.get('camera_name', 'Connected') if camera_info else 'Connected'
-                self.camera_status_label.setText("Camera: {}".format(short_name))
-            else:
-                self.camera_status_label.setText("Camera: Not connected")
-
-            if is_collecting_bg:
-                self.capture_status_label.setText("Data collection: Background collection")
-            else:
-                self.capture_status_label.setText("Data collection: Stopped")
-
         else:
             self.camera_combo.setEnabled(False)
             self.refresh_cameras_btn.setEnabled(False)
@@ -285,8 +261,6 @@ class CameraTab(QWidget):
             self.bg_frames_spinbox.setEnabled(False)
             self.get_background_btn.setEnabled(False)
             self.stop_bg_collection_btn.setEnabled(False)
-            self.camera_status_label.setText("Camera: -")
-            self.capture_status_label.setText("Data collection: -")
 
         self.update_camera_info()
 

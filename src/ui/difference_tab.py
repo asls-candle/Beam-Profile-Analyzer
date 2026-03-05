@@ -105,6 +105,20 @@ class DifferenceTab(QWidget):
         self.stop_capture_btn.clicked.connect(self.on_stop_capture)
         self.export_data_btn.clicked.connect(self.on_export_data)
 
+        # Status
+        status_panel = QGroupBox("Status")
+        status_panel.setMinimumWidth(120)
+        status_layout = QVBoxLayout(status_panel)
+        status_layout.setSpacing(5)
+
+        self.mode_status_label = QLabel("Mode: Camera")
+        self.camera_status_label = QLabel("Camera: Not connected")
+        self.capture_status_label = QLabel("Data collection: Stopped")
+
+        status_layout.addWidget(self.mode_status_label)
+        status_layout.addWidget(self.camera_status_label)
+        status_layout.addWidget(self.capture_status_label)
+
         # Beam information
         beam_info_panel = QGroupBox("Beam Information (difference)")
         beam_info_panel.setMinimumWidth(140)
@@ -129,13 +143,14 @@ class DifferenceTab(QWidget):
 
         # Assemble top panel — empty panels keep layout consistent with other tabs
         top_panel.addWidget(camera_info_panel)
-        for _ in range(4):
+        for _ in range(3):
             empty_panel = QGroupBox()
             empty_panel.setMinimumWidth(120)
             empty_panel.setStyleSheet(
                 "border: none; background-color: transparent;")
             QVBoxLayout(empty_panel)
             top_panel.addWidget(empty_panel)
+        top_panel.addWidget(status_panel)
         top_panel.addWidget(capture_panel)
         top_panel.addWidget(beam_info_panel)
 
@@ -156,21 +171,42 @@ class DifferenceTab(QWidget):
     def update_ui_state(self):
         is_camera_mode = self.main_window.current_mode == "camera"
 
+        self.mode_status_label.setText(
+            "Mode: {}".format('Camera' if is_camera_mode else 'File Reading'))
+
         if is_camera_mode:
             camera_connected = self.main_window.camera_manager.is_connected
             has_background = self.main_window.image_reader.background is not None
+            is_collecting_bg = self.main_window.image_reader.is_collecting_background
 
             self.start_capture_btn.setEnabled(
                 camera_connected and has_background and not self.is_capturing)
             self.stop_capture_btn.setEnabled(self.is_capturing)
             self.export_data_btn.setEnabled(
                 self.frozen_snapshot is not None and not self.is_capturing)
+
+            if camera_connected:
+                camera_info = self.main_window.camera_manager.get_camera_info()
+                short_name = camera_info.get('camera_name', 'Connected') if camera_info else 'Connected'
+                self.camera_status_label.setText("Camera: {}".format(short_name))
+            else:
+                self.camera_status_label.setText("Camera: Not connected")
+
+            if self.is_capturing:
+                self.capture_status_label.setText("Data collection: Capturing")
+            elif is_collecting_bg:
+                self.capture_status_label.setText("Data collection: Background collection")
+            else:
+                self.capture_status_label.setText("Data collection: Stopped")
+
         else:
             self.start_capture_btn.setEnabled(False)
             self.stop_capture_btn.setEnabled(False)
             has_data = (self.frozen_snapshot is not None
                         or self.main_window.file_data.get("current_frame") is not None)
             self.export_data_btn.setEnabled(has_data)
+            self.camera_status_label.setText("Camera: -")
+            self.capture_status_label.setText("Data collection: -")
 
     # ── Camera info ───────────────────────────────────────────────────────────
 
