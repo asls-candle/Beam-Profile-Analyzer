@@ -26,7 +26,6 @@ class CameraTab(QWidget):
 
         self.main_window = main_window
 
-        self.is_capturing = False
         self.last_data_hash = None
 
         self.update_timer = QTimer()
@@ -139,27 +138,16 @@ class CameraTab(QWidget):
         background_layout.addWidget(self.get_background_btn)
         background_layout.addWidget(self.stop_bg_collection_btn)
 
-        # Capture control
+        # ── Capture Control placeholder ───────────────────────────────────────
         capture_panel = QGroupBox("Capture Control")
         capture_panel.setMinimumWidth(120)
         capture_layout = QVBoxLayout(capture_panel)
         capture_layout.setSpacing(5)
 
-        self.start_capture_btn = QPushButton("Start")
-        self.start_capture_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
-        self.start_capture_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
-
-        self.stop_capture_btn = QPushButton("Stop")
-        self.stop_capture_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
-        self.stop_capture_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
-
-        self.export_data_btn = QPushButton("Export Data")
-        self.export_data_btn.setMinimumWidth(BUTTON_MIN_WIDTH)
-        self.export_data_btn.setFixedHeight(BUTTON_MIN_HEIGHT)
-
-        capture_layout.addWidget(self.start_capture_btn)
-        capture_layout.addWidget(self.stop_capture_btn)
-        capture_layout.addWidget(self.export_data_btn)
+        placeholder_label = QLabel("Moved to\nDifference tab")
+        placeholder_label.setAlignment(Qt.AlignCenter)
+        placeholder_label.setStyleSheet("color: grey; font-style: italic;")
+        capture_layout.addWidget(placeholder_label)
 
         # Status
         status_panel = QGroupBox("Status")
@@ -233,16 +221,11 @@ class CameraTab(QWidget):
         self.get_background_btn.clicked.connect(self.on_get_background)
         self.stop_bg_collection_btn.clicked.connect(self.on_stop_bg_collection)
 
-        self.start_capture_btn.clicked.connect(self.on_start_capture)
-        self.stop_capture_btn.clicked.connect(self.on_stop_capture)
-        self.export_data_btn.clicked.connect(self.on_export_data)
-
         self.camera_radio.setChecked(True)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _populate_camera_combo(self, camera_list):
-        """Добавляет камеры в комбобокс."""
         for name in camera_list:
             self.camera_combo.addItem(name)
 
@@ -261,7 +244,6 @@ class CameraTab(QWidget):
         if is_camera_mode:
             camera_connected = self.main_window.camera_manager.is_connected
 
-            # Camera selection — locked while connected
             self.camera_combo.setEnabled(not camera_connected)
             self.refresh_cameras_btn.setEnabled(not camera_connected)
             self.launch_camera_btn.setEnabled(not camera_connected)
@@ -274,11 +256,6 @@ class CameraTab(QWidget):
             self.get_background_btn.setEnabled(camera_connected and not is_collecting_bg)
             self.stop_bg_collection_btn.setEnabled(camera_connected and is_collecting_bg)
 
-            can_start = camera_connected and has_background and not self.is_capturing
-            self.start_capture_btn.setEnabled(can_start)
-            self.stop_capture_btn.setEnabled(camera_connected and self.is_capturing)
-            self.export_data_btn.setEnabled(camera_connected and not self.is_capturing)
-
             if camera_connected:
                 camera_info = self.main_window.camera_manager.get_camera_info()
                 short_name = camera_info.get('camera_name', 'Connected') if camera_info else 'Connected'
@@ -286,15 +263,12 @@ class CameraTab(QWidget):
             else:
                 self.camera_status_label.setText("Camera: Not connected")
 
-            if self.is_capturing:
-                self.capture_status_label.setText("Data collection: Collecting")
-            elif is_collecting_bg:
+            if is_collecting_bg:
                 self.capture_status_label.setText("Data collection: Background collection")
             else:
                 self.capture_status_label.setText("Data collection: Stopped")
 
         else:
-            # File mode — disable all camera controls
             self.camera_combo.setEnabled(False)
             self.refresh_cameras_btn.setEnabled(False)
             self.launch_camera_btn.setEnabled(False)
@@ -302,10 +276,6 @@ class CameraTab(QWidget):
             self.bg_frames_spinbox.setEnabled(False)
             self.get_background_btn.setEnabled(False)
             self.stop_bg_collection_btn.setEnabled(False)
-            self.start_capture_btn.setEnabled(False)
-            self.stop_capture_btn.setEnabled(False)
-            self.export_data_btn.setEnabled(
-                self.main_window.file_data["current_frame"] is not None)
             self.camera_status_label.setText("Camera: -")
             self.capture_status_label.setText("Data collection: -")
 
@@ -327,7 +297,6 @@ class CameraTab(QWidget):
                 "Name: {}".format(camera_info.get('model', '-')))
             self.camera_id_label.setText(
                 "ID: {}".format(camera_info.get('guid_str', '-')))
-
             resolution = camera_info.get("resolution", (0, 0))
             self.camera_resolution_label.setText(
                 "Resolution: {} x {}".format(resolution[0], resolution[1]))
@@ -440,14 +409,12 @@ class CameraTab(QWidget):
             self.file_radio.setChecked(True)
 
     def on_refresh_cameras(self):
-        """Re-scan FireWire bus and repopulate the combo box."""
         current_text = self.camera_combo.currentText()
         self.camera_combo.blockSignals(True)
         self.camera_combo.clear()
         self.camera_combo.addItem("Not selected")
         camera_list = self.main_window.camera_manager.get_camera_list()
         self._populate_camera_combo(camera_list)
-        # Restore previous selection if still present
         idx = self.camera_combo.findText(current_text)
         self.camera_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.camera_combo.blockSignals(False)
@@ -478,21 +445,3 @@ class CameraTab(QWidget):
     def on_stop_bg_collection(self):
         if not self.main_window.stop_background_collection():
             QMessageBox.critical(self, "Error", "Failed to stop background collection.")
-
-    def on_start_capture(self):
-        if self.main_window.image_reader.background is None:
-            QMessageBox.warning(self, "Warning",
-                                "Collect background before starting capture.")
-            return
-        self.is_capturing = True
-        self.update_ui_state()
-
-    def on_stop_capture(self):
-        self.is_capturing = False
-        self.update_ui_state()
-
-    def on_export_data(self):
-        export_path = self.main_window.save_file_dialog()
-        if export_path:
-            self.main_window.statusBar().showMessage(
-                "Data exported to: {}".format(export_path), 5000)

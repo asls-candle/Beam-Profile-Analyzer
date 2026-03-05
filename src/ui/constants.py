@@ -1,3 +1,4 @@
+# src/ui/constants.py
 """
 Module with constants for the user interface
 """
