@@ -1,9 +1,10 @@
-# src.ui.main_window.py
+# src/ui/main_window.py
 
 from PyQt5.QtWidgets import (QMainWindow, QTabWidget, QMessageBox, 
                            QFileDialog, QVBoxLayout, QWidget)
 from PyQt5.QtCore import QSettings
 import os
+import numpy as np
 
 from src.ui.camera_tab import CameraTab
 from src.ui.background_tab import BackgroundTab
@@ -31,6 +32,11 @@ class MainWindow(QMainWindow):
         
         # Application settings
         self.settings = QSettings("BeamProfileAnalyzer", "BeamProfileAnalyzer")
+        
+        # ── ROI state (shared across all tabs) ────────────────────────────────
+        # Stored in mm (data coordinates) so any tab can redraw it.
+        # The pixel-space ROI lives in self.image_analyzer.roi.
+        self.current_roi_mm = None  # (x0, y0, x1, y1) or None
         
         # Data buffers for different modes
         self.camera_data = {
@@ -77,7 +83,66 @@ class MainWindow(QMainWindow):
         
         # Connecting signals
         self.tabs.currentChanged.connect(self.on_tab_changed)
-        
+
+    # ── ROI management ────────────────────────────────────────────────────────
+
+    def set_roi_mm(self, x0_mm, y0_mm, x1_mm, y1_mm,
+                   img_width, img_height, pixel_size_x, pixel_size_y):
+        """
+        Convert mm coordinates to pixel coordinates and set ROI on image_analyzer.
+        Also stores the mm-space ROI so other tabs can redraw it.
+
+        Args:
+            x0_mm, y0_mm, x1_mm, y1_mm : bounding box in mm (data space)
+            img_width, img_height        : image dimensions in pixels
+            pixel_size_x, pixel_size_y  : mm per pixel on each axis
+        """
+        x_min = max(0, int(round(x0_mm / pixel_size_x + img_width  / 2)))
+        x_max = min(img_width,  int(round(x1_mm / pixel_size_x + img_width  / 2)))
+        y_min = max(0, int(round(y0_mm / pixel_size_y + img_height / 2)))
+        y_max = min(img_height, int(round(y1_mm / pixel_size_y + img_height / 2)))
+
+        if x_max <= x_min or y_max <= y_min:
+            return  # degenerate box — ignore
+
+        self.image_analyzer.set_roi(x_min, y_min, x_max, y_max)
+        self.current_roi_mm = (x0_mm, y0_mm, x1_mm, y1_mm)
+
+    def reset_roi(self):
+        """Reset ROI on image_analyzer and clear shared mm state."""
+        self.image_analyzer.reset_roi()
+        self.current_roi_mm = None
+
+    def apply_roi_to_data(self, data):
+        """
+        Return a copy of *data* dict with image arrays cropped to the current ROI.
+        If no ROI is set, returns the original dict unchanged.
+
+        Used by tabs before exporting so the saved files contain only the ROI region.
+        """
+        roi = self.image_analyzer.roi
+        if roi is None:
+            return data
+
+        x_min, y_min, x_max, y_max = roi
+        result = dict(data)
+
+        for key in ('shot', 'background', 'difference', 'current_frame',
+                    'raw_shot', 'raw_background'):
+            if key in result and result[key] is not None:
+                arr = np.asarray(result[key])
+                if arr.ndim >= 2:
+                    result[key] = arr[y_min:y_max, x_min:x_max]
+
+        # Update resolution to reflect the cropped size
+        h = y_max - y_min
+        w = x_max - x_min
+        result['resolution'] = (w, h)
+
+        return result
+
+    # ── Tab management ────────────────────────────────────────────────────────
+
     def on_tab_changed(self, index):
         """
         Handler for tab change
@@ -255,7 +320,8 @@ class MainWindow(QMainWindow):
             
     def export_data(self, filepath, export_format="folder"):
         """
-        Exports data to the specified format
+        Exports data to the specified format.
+        If an ROI is active, only the ROI region is exported.
         
         Args:
             filepath: Path to save file/directory
@@ -287,6 +353,9 @@ class MainWindow(QMainWindow):
             "pixel_size_y": camera_info["pixel_size_y"],
             "camera_name": camera_info.get("camera_name", "Unknown camera")
         }
+
+        # Apply ROI crop if active
+        export_data = self.apply_roi_to_data(export_data)
         
         # Export data
         result = DataExporter.export_data(filepath, export_data, export_format, self.plot_manager)

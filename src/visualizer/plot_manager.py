@@ -1,3 +1,5 @@
+# src/visualizer/plot_manager.py
+
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
