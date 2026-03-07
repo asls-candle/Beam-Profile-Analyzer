@@ -16,7 +16,7 @@ from src.analysis.filters import apply_median_filter
 from src.data.exporter import DataExporter
 from src.ui.roi_selector import RoiSelector
 
-_ROI_LINE_KW = dict(color='#FFD700', linewidth=1.2, linestyle='--', alpha=0.9, zorder=6)
+_ROI_LINE_KW = dict(color='red', linewidth=1.2, linestyle='--', alpha=0.9, zorder=6)
 
 
 class DifferenceTab(QWidget):
@@ -230,8 +230,7 @@ class DifferenceTab(QWidget):
         self._update_roi_status(x0, y0, x1, y1)
         self.reset_roi_btn.setEnabled(True)
         self.last_data_hash = None          # force recalculation
-        if self.plot_canvas:
-            self.plot_canvas.draw_idle()
+        self.update_plots()  # recalc immediately (works for frozen frame too)
 
     def _on_roi_reset(self):
         self.main_window.reset_roi()
@@ -241,8 +240,7 @@ class DifferenceTab(QWidget):
         self.roi_status_label.setStyleSheet("color: gray;")
         self.reset_roi_btn.setEnabled(False)
         self.last_data_hash = None
-        if self.plot_canvas:
-            self.plot_canvas.draw_idle()
+        self.update_plots()  # recalc on full image immediately
 
     def _draw_roi_patch(self, x0, y0, x1, y1):
         if self._ax_heatmap is None:

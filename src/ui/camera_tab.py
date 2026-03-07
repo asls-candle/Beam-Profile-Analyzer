@@ -15,7 +15,7 @@ from matplotlib.figure import Figure
 from src.ui.constants import TOP_PANEL_HEIGHT, BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT
 from src.ui.roi_selector import RoiSelector
 
-_ROI_LINE_KW = dict(color='#FFD700', linewidth=1.2, linestyle='--', alpha=0.9, zorder=6)
+_ROI_LINE_KW = dict(color='red', linewidth=1.2, linestyle='--', alpha=0.9, zorder=6)
 
 
 class CameraTab(QWidget):
