@@ -148,17 +148,6 @@ class CameraTab(QWidget):
         background_layout.addWidget(self.get_background_btn)
         background_layout.addWidget(self.stop_bg_collection_btn)
 
-        # ── Capture Control placeholder ───────────────────────────────────────
-        capture_panel = QGroupBox("Capture Control")
-        capture_panel.setMinimumWidth(120)
-        capture_layout = QVBoxLayout(capture_panel)
-        capture_layout.setSpacing(5)
-
-        placeholder_label = QLabel("Moved to\nDifference tab")
-        placeholder_label.setAlignment(Qt.AlignCenter)
-        placeholder_label.setStyleSheet("color: grey; font-style: italic;")
-        capture_layout.addWidget(placeholder_label)
-
         # Beam information
         beam_info_panel = QGroupBox("Beam Information")
         beam_info_panel.setMinimumWidth(140)
@@ -186,7 +175,6 @@ class CameraTab(QWidget):
         top_panel.addWidget(camera_panel, 1)
         top_panel.addWidget(camera_info_panel, 1)
         top_panel.addWidget(background_panel, 1)
-        top_panel.addWidget(capture_panel, 1)
         empty_panel = QGroupBox()
         empty_panel.setMinimumWidth(120)
         empty_panel.setStyleSheet("border: none; background-color: transparent;")
