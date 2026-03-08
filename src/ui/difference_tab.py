@@ -66,9 +66,6 @@ class DifferenceTab(QWidget):
         self._pixel_size_x = 1.0
         self._pixel_size_y = 1.0
 
-        # Last computed beam parameters (written to export metadata)
-        self._last_rms = (0.0, 0.0)
-
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_tab)
 
@@ -292,12 +289,21 @@ class DifferenceTab(QWidget):
         self.roi_status_label.setStyleSheet("color: #e6a817;")
 
     def _restore_roi_from_shared_state(self):
+        """Sync ROI visuals with shared state. Safe to call at any time."""
+        if self.plot_canvas is None:
+            return
         roi = self.main_window.current_roi_mm
         if roi is not None:
             self._draw_roi_patch(*roi)
             self._show_roi_lines(*roi)
             self._update_roi_status(*roi)
             self.reset_roi_btn.setEnabled(True)
+        else:
+            self._remove_roi_patch()
+            self._hide_roi_lines()
+            self.roi_status_label.setText("ROI: None")
+            self.roi_status_label.setStyleSheet("color: gray;")
+            self.reset_roi_btn.setEnabled(False)
 
     # ── Plot helpers ──────────────────────────────────────────────────────────
 
@@ -408,9 +414,6 @@ class DifferenceTab(QWidget):
         rx, ry = self.main_window.image_analyzer.calculate_rms(
             difference_image, pixel_size_x, pixel_size_y)
 
-        # Cache last computed RMS for export metadata
-        self._last_rms = (rx, ry)
-
         roi_sfx = " (ROI)" if self.main_window.image_analyzer.roi is not None else ""
         self.centroid_x_label.setText(
             "Centroid X{}: {:.6f} mm".format(roi_sfx, cx))
@@ -439,6 +442,7 @@ class DifferenceTab(QWidget):
         self.update_camera_info()
         self.update_ui_state()
         self.update_plots()
+        self._restore_roi_from_shared_state()
 
     # ── Capture Control handlers ──────────────────────────────────────────────
 
@@ -473,9 +477,6 @@ class DifferenceTab(QWidget):
                 "pixel_size_x":   camera_info.get("pixel_size_x", 1.0),
                 "pixel_size_y":   camera_info.get("pixel_size_y", 1.0),
                 "camera_name":    camera_info.get("camera_name", "Unknown camera"),
-                # Beam parameters computed at the moment of Stop
-                "rms_x":          self._last_rms[0],
-                "rms_y":          self._last_rms[1],
             }
             self.last_data_hash = None
             self.update_plots()
@@ -495,19 +496,38 @@ class DifferenceTab(QWidget):
                 snapshot.setdefault("pixel_size_x", info.get("pixel_size_x", 1.0))
                 snapshot.setdefault("pixel_size_y", info.get("pixel_size_y", 1.0))
                 snapshot.setdefault("camera_name",  info.get("camera_name", "Unknown camera"))
-            # Attach the most recently computed RMS (may have been updated by ROI change)
-            snapshot["rms_x"] = self._last_rms[0]
-            snapshot["rms_y"] = self._last_rms[1]
         else:
             if self.frozen_snapshot is None:
                 QMessageBox.warning(self, "Warning",
                                     "No frozen frame to export. "
                                     "Press Start then Stop first.")
                 return
-            snapshot = dict(self.frozen_snapshot)
-            # Overwrite with the current RMS in case ROI was changed after Stop
-            snapshot["rms_x"] = self._last_rms[0]
-            snapshot["rms_y"] = self._last_rms[1]
+            snapshot = self.frozen_snapshot
+
+        # Recalculate centroid / RMS right before export so the values
+        # reflect the current ROI state and end up in metadata.json.
+        # We use the difference image from the snapshot (before ROI crop)
+        # because image_analyzer.roi is already set in pixel space.
+        diff_for_calc = snapshot.get("difference")
+        if diff_for_calc is not None:
+            px = snapshot.get("pixel_size_x", 1.0)
+            py = snapshot.get("pixel_size_y", 1.0)
+            ia = self.main_window.image_analyzer
+            cx, cy = ia.calculate_centroid(diff_for_calc, px, py)
+            rx, ry = ia.calculate_rms(diff_for_calc, px, py)
+            roi_active_label = ia.roi is not None
+            snapshot = dict(snapshot)   # don't mutate frozen_snapshot
+            snapshot["centroid_x_mm"]  = cx
+            snapshot["centroid_y_mm"]  = cy
+            snapshot["rms_x_mm"]       = rx
+            snapshot["rms_y_mm"]       = ry
+            snapshot["roi_active"]     = roi_active_label
+            if roi_active_label:
+                x_min, y_min, x_max, y_max = ia.roi
+                snapshot["roi_pixels"] = [x_min, y_min, x_max, y_max]
+                roi_mm = self.main_window.current_roi_mm
+                if roi_mm is not None:
+                    snapshot["roi_mm"] = list(roi_mm)
 
         # Apply ROI crop if active
         snapshot = self.main_window.apply_roi_to_data(snapshot)

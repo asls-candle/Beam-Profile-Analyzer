@@ -330,12 +330,21 @@ class CameraTab(QWidget):
         self.roi_status_label.setStyleSheet("color: #e6a817;")
 
     def _restore_roi_from_shared_state(self):
+        """Sync ROI visuals with shared state. Safe to call at any time."""
+        if self.plot_canvas is None:
+            return
         roi = self.main_window.current_roi_mm
         if roi is not None:
             self._draw_roi_patch(*roi)
             self._show_roi_lines(*roi)
             self._update_roi_status(*roi)
             self.reset_roi_btn.setEnabled(True)
+        else:
+            self._remove_roi_patch()
+            self._hide_roi_lines()
+            self.roi_status_label.setText("ROI: None")
+            self.roi_status_label.setStyleSheet("color: gray;")
+            self.reset_roi_btn.setEnabled(False)
 
     # ── Plot helpers ──────────────────────────────────────────────────────────
 
@@ -464,6 +473,7 @@ class CameraTab(QWidget):
     def update_tab(self):
         self.update_ui_state()
         self.update_plots()
+        self._restore_roi_from_shared_state()
 
     # ── Handlers ──────────────────────────────────────────────────────────────
 
