@@ -66,6 +66,9 @@ class DifferenceTab(QWidget):
         self._pixel_size_x = 1.0
         self._pixel_size_y = 1.0
 
+        # Last computed beam parameters (written to export metadata)
+        self._last_rms = (0.0, 0.0)
+
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_tab)
 
@@ -405,6 +408,9 @@ class DifferenceTab(QWidget):
         rx, ry = self.main_window.image_analyzer.calculate_rms(
             difference_image, pixel_size_x, pixel_size_y)
 
+        # Cache last computed RMS for export metadata
+        self._last_rms = (rx, ry)
+
         roi_sfx = " (ROI)" if self.main_window.image_analyzer.roi is not None else ""
         self.centroid_x_label.setText(
             "Centroid X{}: {:.6f} mm".format(roi_sfx, cx))
@@ -467,6 +473,9 @@ class DifferenceTab(QWidget):
                 "pixel_size_x":   camera_info.get("pixel_size_x", 1.0),
                 "pixel_size_y":   camera_info.get("pixel_size_y", 1.0),
                 "camera_name":    camera_info.get("camera_name", "Unknown camera"),
+                # Beam parameters computed at the moment of Stop
+                "rms_x":          self._last_rms[0],
+                "rms_y":          self._last_rms[1],
             }
             self.last_data_hash = None
             self.update_plots()
@@ -486,13 +495,19 @@ class DifferenceTab(QWidget):
                 snapshot.setdefault("pixel_size_x", info.get("pixel_size_x", 1.0))
                 snapshot.setdefault("pixel_size_y", info.get("pixel_size_y", 1.0))
                 snapshot.setdefault("camera_name",  info.get("camera_name", "Unknown camera"))
+            # Attach the most recently computed RMS (may have been updated by ROI change)
+            snapshot["rms_x"] = self._last_rms[0]
+            snapshot["rms_y"] = self._last_rms[1]
         else:
             if self.frozen_snapshot is None:
                 QMessageBox.warning(self, "Warning",
                                     "No frozen frame to export. "
                                     "Press Start then Stop first.")
                 return
-            snapshot = self.frozen_snapshot
+            snapshot = dict(self.frozen_snapshot)
+            # Overwrite with the current RMS in case ROI was changed after Stop
+            snapshot["rms_x"] = self._last_rms[0]
+            snapshot["rms_y"] = self._last_rms[1]
 
         # Apply ROI crop if active
         snapshot = self.main_window.apply_roi_to_data(snapshot)

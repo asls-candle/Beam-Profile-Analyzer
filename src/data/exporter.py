@@ -34,6 +34,9 @@ class DataExporter:
         """
         Экспортирует данные в отдельную папку: JSON для метаданных и чистые CSV файлы для массивов.
 
+        Скалярные значения (в том числе rms_x, rms_y) автоматически попадают
+        в metadata.json, так как они не являются numpy-массивами.
+
         Args:
             folder_path: Путь к папке для сохранения
             data_dict: Словарь с данными для экспорта
@@ -131,7 +134,11 @@ class DataExporter:
                     "x": data_dict.get("pixel_size_x", 0),
                     "y": data_dict.get("pixel_size_y", 0)
                 },
-                "date": data_dict.get("date", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                "date": data_dict.get("date", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                "beam": {
+                    "rms_x_mm": data_dict.get("rms_x", None),
+                    "rms_y_mm": data_dict.get("rms_y", None),
+                },
             }
             with open(os.path.join(folder_path, "metadata.json"), 'w') as f:
                 json.dump(metadata, f, indent=4)
