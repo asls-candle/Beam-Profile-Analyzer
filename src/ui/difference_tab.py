@@ -468,6 +468,12 @@ class DifferenceTab(QWidget):
             if data["difference"] is None or camera_info is None:
                 return
             self._render_difference(data["difference"], camera_info)
+        elif self.main_window.current_mode == "file":
+            data        = self.main_window.file_data
+            camera_info = self.main_window.get_camera_info()
+            if data.get("difference") is None or camera_info is None:
+                return
+            self._render_difference(data["difference"], camera_info)
         elif self.frozen_difference is not None and self.frozen_snapshot is not None:
             camera_info = {
                 "pixel_size_x": self.frozen_snapshot.get("pixel_size_x", 1),
