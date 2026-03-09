@@ -15,6 +15,7 @@ from src.ui.constants import TOP_PANEL_HEIGHT, BUTTON_MIN_WIDTH, BUTTON_MIN_HEIG
 from src.analysis.filters import apply_median_filter
 from src.data.exporter import DataExporter
 from src.ui.roi_selector import RoiSelector
+from src.ui.camera_controls_widget import CameraControlsWidget
 
 _ROI_LINE_KW = dict(color='red', linewidth=1.2, linestyle='--', alpha=0.9, zorder=6)
 
@@ -30,6 +31,11 @@ class DifferenceTab(QWidget):
     draws yellow rectangle + dashed gold lines on projection plots.
     If an ROI is active when Export is pressed, only the ROI region is saved.
     Double-click or "Reset ROI" button → clears ROI.
+
+    Camera Controls: The ``CameraControlsWidget`` here is the *twin* of the
+    master widget on CameraTab.  Changes in either tab are propagated via
+    ``CameraTab.sync_controls_from_twin()`` so both always show the same
+    values.  The twin is also locked during background collection.
     """
 
     def __init__(self, main_window):
@@ -82,6 +88,7 @@ class DifferenceTab(QWidget):
         top_panel_widget.setLayout(top_panel)
         top_panel_widget.setFixedHeight(TOP_PANEL_HEIGHT)
 
+        # ── Camera Information ──
         camera_info_panel = QGroupBox("Camera Information")
         camera_info_panel.setMinimumWidth(150)
         ci_layout = QVBoxLayout(camera_info_panel)
@@ -93,6 +100,13 @@ class DifferenceTab(QWidget):
                     self.camera_pixel_size_label):
             ci_layout.addWidget(lbl)
 
+        # ── Camera Controls twin ──
+        # Same three sliders as in CameraTab; changes in either tab are
+        # forwarded to the other through on_exposure_changed().
+        self.camera_controls = CameraControlsWidget("Exposure Controls")
+        self.camera_controls.setMinimumWidth(240)
+
+        # ── Capture Control ──
         capture_panel = QGroupBox("Capture Control")
         capture_panel.setMinimumWidth(120)
         cap_layout = QVBoxLayout(capture_panel)
@@ -108,6 +122,7 @@ class DifferenceTab(QWidget):
         self.stop_capture_btn.clicked.connect(self.on_stop_capture)
         self.export_data_btn.clicked.connect(self.on_export_data)
 
+        # ── Status ──
         status_panel = QGroupBox("Status")
         status_panel.setMinimumWidth(120)
         st_layout = QVBoxLayout(status_panel)
@@ -119,6 +134,7 @@ class DifferenceTab(QWidget):
                     self.capture_status_label):
             st_layout.addWidget(lbl)
 
+        # ── Beam Information ──
         beam_info_panel = QGroupBox("Beam Information (difference)")
         beam_info_panel.setMinimumWidth(140)
         bi_layout = QVBoxLayout(beam_info_panel)
@@ -144,16 +160,15 @@ class DifferenceTab(QWidget):
                   self.roi_status_label, self.reset_roi_btn):
             bi_layout.addWidget(w)
 
-        top_panel.addWidget(camera_info_panel)
-        for _ in range(3):
-            ep = QGroupBox()
-            ep.setMinimumWidth(120)
-            ep.setStyleSheet("border: none; background-color: transparent;")
-            QVBoxLayout(ep)
-            top_panel.addWidget(ep)
-        top_panel.addWidget(status_panel)
-        top_panel.addWidget(capture_panel)
-        top_panel.addWidget(beam_info_panel)
+        # ── Assemble top panel ──
+        top_panel.addWidget(camera_info_panel,    1)
+        top_panel.addWidget(self.camera_controls, 2)   # wider to fit sliders
+        top_panel.addWidget(status_panel,         1)
+        top_panel.addWidget(capture_panel,        1)
+        top_panel.addWidget(beam_info_panel,      1)
+
+        # ── Connect exposure signal ──
+        self.camera_controls.exposure_changed.connect(self.on_exposure_changed)
 
         self.plot_widget = QWidget()
         self.plot_widget.setMinimumSize(400, 400)
@@ -180,6 +195,8 @@ class DifferenceTab(QWidget):
             self.stop_capture_btn.setEnabled(self.is_capturing)
             self.export_data_btn.setEnabled(
                 self.frozen_snapshot is not None and not self.is_capturing)
+            # Exposure controls mirror the camera_tab state
+            self.camera_controls.set_controls_enabled(connected and not collecting_bg)
             if connected:
                 info = self.main_window.camera_manager.get_camera_info()
                 name = info.get('camera_name', 'Connected') if info else 'Connected'
@@ -198,6 +215,7 @@ class DifferenceTab(QWidget):
             has_data = (self.frozen_snapshot is not None
                         or self.main_window.file_data.get("current_frame") is not None)
             self.export_data_btn.setEnabled(has_data)
+            self.camera_controls.set_controls_enabled(False)
             self.camera_status_label.setText("Camera: -")
             self.capture_status_label.setText("Data collection: -")
 
@@ -217,6 +235,25 @@ class DifferenceTab(QWidget):
             self.camera_resolution_label.setText("Resolution: -")
             self.camera_pixel_size_label.setText("Pixel size: -")
 
+    # ── Exposure controls ─────────────────────────────────────────────────────
+
+    def on_exposure_changed(self, shutter, gain, brightness):
+        """
+        User moved a slider in *this* tab → write to camera, then sync the
+        master widget on CameraTab so both tabs stay in agreement.
+        """
+        self.main_window.camera_manager.set_exposure(
+            shutter=shutter,
+            gain=gain,
+            brightness=brightness,
+        )
+        # Sync the master widget on CameraTab (silent, no re-emission)
+        try:
+            self.main_window.camera_tab.sync_controls_from_twin(
+                shutter, gain, brightness)
+        except AttributeError:
+            pass
+
     # ── ROI helpers ───────────────────────────────────────────────────────────
 
     def _on_roi_selected(self, x0, y0, x1, y1):
@@ -229,8 +266,8 @@ class DifferenceTab(QWidget):
         self._show_roi_lines(x0, y0, x1, y1)
         self._update_roi_status(x0, y0, x1, y1)
         self.reset_roi_btn.setEnabled(True)
-        self.last_data_hash = None          # force recalculation
-        self.update_plots()  # recalc immediately (works for frozen frame too)
+        self.last_data_hash = None
+        self.update_plots()
 
     def _on_roi_reset(self):
         self.main_window.reset_roi()
@@ -240,7 +277,7 @@ class DifferenceTab(QWidget):
         self.roi_status_label.setStyleSheet("color: gray;")
         self.reset_roi_btn.setEnabled(False)
         self.last_data_hash = None
-        self.update_plots()  # recalc on full image immediately
+        self.update_plots()
 
     def _draw_roi_patch(self, x0, y0, x1, y1):
         if self._ax_heatmap is None:
@@ -289,7 +326,6 @@ class DifferenceTab(QWidget):
         self.roi_status_label.setStyleSheet("color: #e6a817;")
 
     def _restore_roi_from_shared_state(self):
-        """Sync ROI visuals with shared state. Safe to call at any time."""
         if self.plot_canvas is None:
             return
         roi = self.main_window.current_roi_mm
@@ -408,7 +444,6 @@ class DifferenceTab(QWidget):
         else:
             self._update_artists(img_data, x_mm, y_mm)
 
-        # Centroid / RMS — computed on ROI region if ROI is active
         cx, cy = self.main_window.image_analyzer.calculate_centroid(
             difference_image, pixel_size_x, pixel_size_y)
         rx, ry = self.main_window.image_analyzer.calculate_rms(
@@ -504,10 +539,6 @@ class DifferenceTab(QWidget):
                 return
             snapshot = self.frozen_snapshot
 
-        # Recalculate centroid / RMS right before export so the values
-        # reflect the current ROI state and end up in metadata.json.
-        # We use the difference image from the snapshot (before ROI crop)
-        # because image_analyzer.roi is already set in pixel space.
         diff_for_calc = snapshot.get("difference")
         if diff_for_calc is not None:
             px = snapshot.get("pixel_size_x", 1.0)
@@ -516,7 +547,7 @@ class DifferenceTab(QWidget):
             cx, cy = ia.calculate_centroid(diff_for_calc, px, py)
             rx, ry = ia.calculate_rms(diff_for_calc, px, py)
             roi_active_label = ia.roi is not None
-            snapshot = dict(snapshot)   # don't mutate frozen_snapshot
+            snapshot = dict(snapshot)
             snapshot["centroid_x_mm"]  = cx
             snapshot["centroid_y_mm"]  = cy
             snapshot["rms_x_mm"]       = rx
@@ -529,7 +560,6 @@ class DifferenceTab(QWidget):
                 if roi_mm is not None:
                     snapshot["roi_mm"] = list(roi_mm)
 
-        # Apply ROI crop if active
         snapshot = self.main_window.apply_roi_to_data(snapshot)
 
         roi_active = self.main_window.image_analyzer.roi is not None

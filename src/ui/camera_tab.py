@@ -14,6 +14,7 @@ from matplotlib.figure import Figure
 
 from src.ui.constants import TOP_PANEL_HEIGHT, BUTTON_MIN_WIDTH, BUTTON_MIN_HEIGHT
 from src.ui.roi_selector import RoiSelector
+from src.ui.camera_controls_widget import CameraControlsWidget
 
 _ROI_LINE_KW = dict(color='red', linewidth=1.2, linestyle='--', alpha=0.9, zorder=6)
 
@@ -25,6 +26,11 @@ class CameraTab(QWidget):
     ROI: left-click+drag on heatmap → sets ROI, recalculates centroid/RMS,
     draws yellow rectangle + dashed gold lines on the projection plots.
     Double-click or "Reset ROI" button → clears ROI.
+
+    Camera Controls: Shutter / Gain / Brightness sliders are kept in sync
+    with the twin widget on DifferenceTab through
+    ``main_window.sync_camera_controls()``.  They are disabled while
+    background collection is running.
     """
 
     def __init__(self, main_window):
@@ -43,10 +49,10 @@ class CameraTab(QWidget):
         self._last_img_shape = None
 
         # ROI boundary lines on projections
-        self._roi_vline_x0 = None   # left  vertical line on ax_x_proj
-        self._roi_vline_x1 = None   # right vertical line on ax_x_proj
-        self._roi_hline_y0 = None   # bottom horizontal line on ax_y_proj
-        self._roi_hline_y1 = None   # top    horizontal line on ax_y_proj
+        self._roi_vline_x0 = None
+        self._roi_vline_x1 = None
+        self._roi_hline_y0 = None
+        self._roi_hline_y1 = None
 
         # ROI state
         self._roi_selector = None
@@ -74,6 +80,7 @@ class CameraTab(QWidget):
         top_panel_widget.setLayout(top_panel)
         top_panel_widget.setFixedHeight(TOP_PANEL_HEIGHT)
 
+        # ── Operation Mode ──
         mode_panel = QGroupBox("Operation Mode")
         mode_panel.setMinimumWidth(120)
         mode_layout = QVBoxLayout(mode_panel)
@@ -90,6 +97,7 @@ class CameraTab(QWidget):
         mode_layout.addWidget(self.file_radio)
         mode_layout.addWidget(self.open_file_btn)
 
+        # ── Camera Control ──
         camera_panel = QGroupBox("Camera Control")
         camera_panel.setMinimumWidth(120)
         camera_layout = QVBoxLayout(camera_panel)
@@ -109,6 +117,7 @@ class CameraTab(QWidget):
         camera_layout.addWidget(self.launch_camera_btn)
         camera_layout.addWidget(self.stop_camera_btn)
 
+        # ── Camera Information ──
         camera_info_panel = QGroupBox("Camera Information")
         camera_info_panel.setMinimumWidth(120)
         ci_layout = QVBoxLayout(camera_info_panel)
@@ -121,6 +130,7 @@ class CameraTab(QWidget):
                     self.camera_resolution_label, self.camera_pixel_size_label):
             ci_layout.addWidget(lbl)
 
+        # ── Background Collection ──
         background_panel = QGroupBox("Background Collection")
         background_panel.setMinimumWidth(120)
         bg_layout = QVBoxLayout(background_panel)
@@ -140,6 +150,12 @@ class CameraTab(QWidget):
         bg_layout.addWidget(self.get_background_btn)
         bg_layout.addWidget(self.stop_bg_collection_btn)
 
+        # ── Camera Controls (Shutter / Gain / Brightness) ──
+        # This widget is the master; its twin in DifferenceTab is the slave.
+        self.camera_controls = CameraControlsWidget("Exposure Controls")
+        self.camera_controls.setMinimumWidth(240)
+
+        # ── Beam Information ──
         beam_info_panel = QGroupBox("Beam Information")
         beam_info_panel.setMinimumWidth(140)
         bi_layout = QVBoxLayout(beam_info_panel)
@@ -165,16 +181,13 @@ class CameraTab(QWidget):
                   self.roi_status_label, self.reset_roi_btn):
             bi_layout.addWidget(w)
 
-        top_panel.addWidget(mode_panel, 1)
-        top_panel.addWidget(camera_panel, 1)
-        top_panel.addWidget(camera_info_panel, 1)
-        top_panel.addWidget(background_panel, 1)
-        empty = QGroupBox()
-        empty.setMinimumWidth(120)
-        empty.setStyleSheet("border: none; background-color: transparent;")
-        QVBoxLayout(empty)
-        top_panel.addWidget(empty, 1)
-        top_panel.addWidget(beam_info_panel, 1)
+        # ── Assemble top panel ──
+        top_panel.addWidget(mode_panel,          1)
+        top_panel.addWidget(camera_panel,        1)
+        top_panel.addWidget(camera_info_panel,   1)
+        top_panel.addWidget(background_panel,    1)
+        top_panel.addWidget(self.camera_controls, 2)   # wider to fit sliders
+        top_panel.addWidget(beam_info_panel,     1)
 
         self.plot_widget = QWidget()
         self.plot_widget.setMinimumSize(400, 400)
@@ -195,6 +208,8 @@ class CameraTab(QWidget):
         self.stop_camera_btn.clicked.connect(self.on_stop_camera)
         self.get_background_btn.clicked.connect(self.on_get_background)
         self.stop_bg_collection_btn.clicked.connect(self.on_stop_bg_collection)
+        # Exposure controls
+        self.camera_controls.exposure_changed.connect(self.on_exposure_changed)
         self.camera_radio.setChecked(True)
 
     def _populate_camera_combo(self, camera_list):
@@ -219,12 +234,15 @@ class CameraTab(QWidget):
             self.bg_frames_spinbox.setEnabled(connected and not collecting_bg)
             self.get_background_btn.setEnabled(connected and not collecting_bg)
             self.stop_bg_collection_btn.setEnabled(connected and collecting_bg)
+            # Exposure controls: enabled only when connected and not collecting background
+            self.camera_controls.set_controls_enabled(connected and not collecting_bg)
         else:
             for w in (self.camera_combo, self.refresh_cameras_btn,
                       self.launch_camera_btn, self.stop_camera_btn,
                       self.bg_frames_spinbox, self.get_background_btn,
                       self.stop_bg_collection_btn):
                 w.setEnabled(False)
+            self.camera_controls.set_controls_enabled(False)
         self.update_camera_info()
 
     def update_camera_info(self):
@@ -249,6 +267,95 @@ class CameraTab(QWidget):
             self.camera_resolution_label.setText("Resolution: -")
             self.camera_pixel_size_label.setText("Pixel size: -")
 
+    # ── Exposure controls ─────────────────────────────────────────────────────
+
+    def refresh_exposure_ranges(self):
+        """
+        Read hardware limits from the connected camera and update both the
+        local widget and the twin widget on DifferenceTab.
+
+        Called once after a successful camera connection.
+        """
+        info = self.main_window.camera_manager.get_exposure_info()
+        if info is None:
+            return
+        self.camera_controls.set_ranges(
+            shutter_range=info['shutter']['range'],
+            gain_range=info['gain']['range'],
+            brightness_range=info['brightness']['range'],
+        )
+        self.camera_controls.set_values(
+            shutter=info['shutter']['value'],
+            gain=info['gain']['value'],
+            brightness=info['brightness']['value'],
+        )
+        # Propagate to DifferenceTab twin (without triggering camera write)
+        self._sync_twin_widget(
+            info['shutter']['value'],
+            info['gain']['value'],
+            info['brightness']['value'],
+        )
+
+    def _sync_twin_widget(self, shutter, gain, brightness):
+        """
+        Push the current exposure values to the DifferenceTab twin widget
+        (silent update — does not loop back to the camera).
+        """
+        try:
+            diff_tab = self.main_window.difference_tab
+            diff_tab.camera_controls.set_ranges(
+                shutter_range=self.camera_controls._shutter_slider.minimum(),
+                gain_range=self.camera_controls._gain_slider.minimum(),
+                brightness_range=self.camera_controls._brightness_slider.minimum(),
+            )
+        except Exception:
+            pass
+        try:
+            diff_tab = self.main_window.difference_tab
+            # Also sync ranges
+            diff_tab.camera_controls.set_ranges(
+                shutter_range=(
+                    self.camera_controls._shutter_slider.minimum(),
+                    self.camera_controls._shutter_slider.maximum()),
+                gain_range=(
+                    self.camera_controls._gain_slider.minimum(),
+                    self.camera_controls._gain_slider.maximum()),
+                brightness_range=(
+                    self.camera_controls._brightness_slider.minimum(),
+                    self.camera_controls._brightness_slider.maximum()),
+            )
+            diff_tab.camera_controls.set_values(
+                shutter=shutter,
+                gain=gain,
+                brightness=brightness,
+            )
+        except AttributeError:
+            # DifferenceTab not yet created — harmless, it will read values
+            # from the camera when it first needs them.
+            pass
+
+    def on_exposure_changed(self, shutter, gain, brightness):
+        """
+        User moved a slider → write to camera, propagate to twin widget.
+        """
+        self.main_window.camera_manager.set_exposure(
+            shutter=shutter,
+            gain=gain,
+            brightness=brightness,
+        )
+        self._sync_twin_widget(shutter, gain, brightness)
+
+    def sync_controls_from_twin(self, shutter, gain, brightness):
+        """
+        Called by DifferenceTab when the user changes values there so this
+        widget mirrors them (without re-triggering the camera write).
+        """
+        self.camera_controls.set_values(
+            shutter=shutter,
+            gain=gain,
+            brightness=brightness,
+        )
+
     # ── ROI helpers ───────────────────────────────────────────────────────────
 
     def _on_roi_selected(self, x0, y0, x1, y1):
@@ -261,7 +368,7 @@ class CameraTab(QWidget):
         self._show_roi_lines(x0, y0, x1, y1)
         self._update_roi_status(x0, y0, x1, y1)
         self.reset_roi_btn.setEnabled(True)
-        self.last_data_hash = None          # force recalculation
+        self.last_data_hash = None
         if self.plot_canvas:
             self.plot_canvas.draw_idle()
 
@@ -272,7 +379,7 @@ class CameraTab(QWidget):
         self.roi_status_label.setText("ROI: None")
         self.roi_status_label.setStyleSheet("color: gray;")
         self.reset_roi_btn.setEnabled(False)
-        self.last_data_hash = None          # force recalculation on full image
+        self.last_data_hash = None
         if self.plot_canvas:
             self.plot_canvas.draw_idle()
 
@@ -296,10 +403,8 @@ class CameraTab(QWidget):
             self._roi_patch = None
 
     def _show_roi_lines(self, x0, y0, x1, y1):
-        """Create or move the four boundary lines on the projection axes."""
         if self._ax_x_proj is None or self._ax_y_proj is None:
             return
-        # Vertical lines on X-projection (bottom plot)
         if self._roi_vline_x0 is None:
             self._roi_vline_x0 = self._ax_x_proj.axvline(x0, **_ROI_LINE_KW)
             self._roi_vline_x1 = self._ax_x_proj.axvline(x1, **_ROI_LINE_KW)
@@ -308,7 +413,6 @@ class CameraTab(QWidget):
             self._roi_vline_x1.set_xdata([x1, x1])
             self._roi_vline_x0.set_visible(True)
             self._roi_vline_x1.set_visible(True)
-        # Horizontal lines on Y-projection (left plot)
         if self._roi_hline_y0 is None:
             self._roi_hline_y0 = self._ax_y_proj.axhline(y0, **_ROI_LINE_KW)
             self._roi_hline_y1 = self._ax_y_proj.axhline(y1, **_ROI_LINE_KW)
@@ -330,7 +434,6 @@ class CameraTab(QWidget):
         self.roi_status_label.setStyleSheet("color: #e6a817;")
 
     def _restore_roi_from_shared_state(self):
-        """Sync ROI visuals with shared state. Safe to call at any time."""
         if self.plot_canvas is None:
             return
         roi = self.main_window.current_roi_mm
@@ -504,6 +607,9 @@ class CameraTab(QWidget):
         if not self.main_window.connect_to_camera(name):
             QMessageBox.critical(self, "Error",
                                  "Failed to connect to camera:\n{}".format(name))
+            return
+        # Camera connected successfully — load real hardware ranges & values
+        self.refresh_exposure_ranges()
 
     def on_stop_camera(self):
         if not self.main_window.disconnect_camera():

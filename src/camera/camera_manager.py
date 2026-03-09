@@ -7,7 +7,7 @@ import numpy as np
 import logging
 from threading import Lock
 
-os.environ['DC1394_V2_STRATEGY'] = '1'
+# os.environ['DC1394_V2_STRATEGY'] = '1'
 
 try:
     from pydc1394 import Camera, Context
@@ -146,9 +146,10 @@ class CameraManager:
 
     # Настройки экспозиции по умолчанию
     DEFAULT_EXPOSURE = {
-        "shutter": 1,
-        "gain": 0,
-        "exposure": 0,
+        "shutter":    1,
+        "gain":       0,
+        "brightness": 0,
+        "exposure":   0,
     }
 
     # Размер пикселя по умолчанию (мм)
@@ -325,6 +326,60 @@ class CameraManager:
         if camera_name is None:
             return None
         return self.cameras.get(camera_name)
+
+    # ── Диапазоны и текущие значения параметров экспозиции ───────────────────
+
+    def get_exposure_info(self):
+        """
+        Возвращает диапазоны и текущие значения для shutter, gain, brightness.
+
+        Returns:
+            dict вида::
+
+                {
+                    'shutter':    {'range': (lo, hi), 'value': current},
+                    'gain':       {'range': (lo, hi), 'value': current},
+                    'brightness': {'range': (lo, hi), 'value': current},
+                }
+
+            Для недоступной камеры возвращает ``None``.
+        """
+        if not self.is_connected or self.camera is None:
+            return None
+
+        result = {}
+        for name in ('shutter', 'gain', 'brightness'):
+            try:
+                feat = getattr(self.camera, name)
+                lo, hi = feat.value_range
+                result[name] = {
+                    'range': (int(lo), int(hi)),
+                    'value': int(feat.val),
+                }
+            except Exception as e:
+                logger.debug("get_exposure_info: %s not available — %s", name, e)
+                # Provide safe fallback so the UI always gets usable data
+                fallbacks = {
+                    'shutter':    {'range': (0, 863),  'value': self.DEFAULT_EXPOSURE['shutter']},
+                    'gain':       {'range': (0, 683),  'value': self.DEFAULT_EXPOSURE['gain']},
+                    'brightness': {'range': (0, 255),  'value': self.DEFAULT_EXPOSURE['brightness']},
+                }
+                result[name] = fallbacks[name]
+        return result
+
+    def get_feature_value(self, name):
+        """
+        Возвращает текущее raw-значение параметра камеры или None.
+
+        Args:
+            name: имя параметра ('shutter', 'gain', 'brightness', …)
+        """
+        if not self.is_connected or self.camera is None:
+            return None
+        try:
+            return int(getattr(self.camera, name).val)
+        except Exception:
+            return None
 
     # ── Подключение / отключение ──────────────────────────────────────────────
 
@@ -551,24 +606,36 @@ class CameraManager:
     def _configure_exposure(self):
         if self.manual_exposure:
             logger.info("Настройка ручной экспозиции")
-            _apply_feature(self.camera, 'exposure', self.DEFAULT_EXPOSURE["exposure"], mode='manual')
-            _apply_feature(self.camera, 'shutter',  self.DEFAULT_EXPOSURE["shutter"],  mode='manual')
-            _apply_feature(self.camera, 'gain',     self.DEFAULT_EXPOSURE["gain"],     mode='manual')
+            _apply_feature(self.camera, 'exposure',   self.DEFAULT_EXPOSURE["exposure"],   mode='manual')
+            _apply_feature(self.camera, 'shutter',    self.DEFAULT_EXPOSURE["shutter"],    mode='manual')
+            _apply_feature(self.camera, 'gain',       self.DEFAULT_EXPOSURE["gain"],       mode='manual')
+            _apply_feature(self.camera, 'brightness', self.DEFAULT_EXPOSURE["brightness"], mode='manual')
         else:
             logger.info("Автоматическая экспозиция")
             _apply_feature(self.camera, 'exposure', 0, mode='auto')
             _apply_feature(self.camera, 'shutter',  0, mode='auto')
             _apply_feature(self.camera, 'gain',     0, mode='auto')
 
-    def set_exposure(self, shutter=None, gain=None, exposure=None):
+    def set_exposure(self, shutter=None, gain=None, brightness=None, exposure=None):
+        """
+        Устанавливает параметры экспозиции камеры в реальном времени.
+
+        Args:
+            shutter:    raw-значение выдержки  (0 … 863 для Flea2)
+            gain:       raw-значение усиления  (0 … 683)
+            brightness: raw-значение яркости   (0 … 255)
+            exposure:   raw-значение exposure (EV, авто-экспозиция)
+        """
         if not self.is_connected or self.camera is None:
             return
         if shutter is not None:
-            _apply_feature(self.camera, 'shutter', shutter, mode='manual')
+            _apply_feature(self.camera, 'shutter',    shutter,    mode='manual')
         if gain is not None:
-            _apply_feature(self.camera, 'gain', gain, mode='manual')
+            _apply_feature(self.camera, 'gain',       gain,       mode='manual')
+        if brightness is not None:
+            _apply_feature(self.camera, 'brightness', brightness, mode='manual')
         if exposure is not None:
-            _apply_feature(self.camera, 'exposure', exposure, mode='manual')
+            _apply_feature(self.camera, 'exposure',   exposure,   mode='manual')
 
     # ── Триггер ───────────────────────────────────────────────────────────────
 
