@@ -7,7 +7,7 @@ import numpy as np
 import logging
 from threading import Lock
 
-# os.environ['DC1394_V2_STRATEGY'] = '1'
+os.environ['DC1394_V2_STRATEGY'] = '1'
 
 try:
     from pydc1394 import Camera, Context
@@ -63,34 +63,105 @@ def _get_image_size(mode):
     return 0, 0
 
 
+def _get_feature_range(feat):
+    """
+    Возвращает (lo, hi) диапазон параметра камеры.
+
+    pydc1394 предоставляет диапазон через два возможных атрибута:
+      - feat.value_range  (наблюдается в логах Flea2 как 'value_range')
+      - feat.range        (устаревший / альтернативный alias)
+
+    Пробуем оба, чтобы код работал независимо от версии обёртки.
+    """
+    for attr in ('value_range', 'range'):
+        try:
+            lo, hi = getattr(feat, attr)
+            return lo, hi
+        except Exception:
+            pass
+    return None, None
+
+
 def _apply_feature(camera, name, value, mode='manual'):
-    """Безопасно устанавливает параметр камеры"""
+    """
+    Безопасно устанавливает параметр камеры с диагностическим логированием.
+
+    Лог-уровни:
+      DEBUG   - значение ДО записи (readback из камеры)
+      INFO    - значение ПОСЛЕ записи (readback из камеры)
+      WARNING - клэмпинг, несовпадение или ошибка
+    """
     try:
         feat = getattr(camera, name)
+
+        # Значение ДО изменения
+        try:
+            before = feat.value
+            logger.debug("[DIAG] %s: before=%s  requested=%s  mode=%s",
+                         name, before, value, mode)
+        except Exception:
+            logger.debug("[DIAG] %s: before=<unreadable>  requested=%s  mode=%s",
+                         name, value, mode)
+
         try:
             feat.mode = mode
-        except Exception:
-            pass
-        try:
-            lo, hi = feat.range
+            try:
+                actual_mode = feat.mode
+                if str(actual_mode) != str(mode):
+                    logger.warning("[DIAG] %s: mode MISMATCH  requested=%s  actual=%s",
+                                   name, mode, actual_mode)
+                else:
+                    logger.info("[DIAG] %s: mode OK  actual=%s", name, actual_mode)
+            except Exception:
+                logger.info("[DIAG] %s: mode set to %s (read-back unavailable)", name, mode)
+        except Exception as ex:
+            logger.warning("[DIAG] %s: mode FAILED  requested=%s  error=%s"
+                           " -- camera may stay in auto mode", name, mode, ex)
+
+        lo, hi = _get_feature_range(feat)
+        if lo is not None and hi is not None:
             if value < lo:
-                logger.debug("CLAMP %s: %s -> %s", name, value, lo)
+                logger.warning("[DIAG] %s: requested %s < min %s -- clamped to %s",
+                               name, value, lo, lo)
                 value = lo
             if value > hi:
-                logger.debug("CLAMP %s: %s -> %s", name, value, hi)
+                logger.warning("[DIAG] %s: requested %s > max %s -- clamped to %s",
+                               name, value, hi, hi)
                 value = hi
-        except Exception:
-            pass
-        feat.val = value
+
+        feat.value = value
+
+        # Значение ПОСЛЕ изменения: raw + абсолютное (секунды/дБ)
         try:
-            actual = feat.val
-            logger.info("  %s = %s (requested: %s)", name, actual, value)
+            after = feat.value
+            # Пробуем прочитать абсолютное значение (секунды для shutter, дБ для gain)
+            try:
+                abs_val = feat.absolute
+                abs_info = "  abs=%.6f" % abs_val
+            except Exception:
+                abs_info = "  abs=<unavailable>"
+
+            # Пробуем прочитать, поддерживается ли абсолютный режим
+            try:
+                abs_control = feat.absolute_control
+                abs_info += "  abs_control=%s" % abs_control
+            except Exception:
+                pass
+
+            if after == value:
+                logger.info("[DIAG] %s: OK  written=%s  readback=%s%s",
+                            name, value, after, abs_info)
+            else:
+                logger.warning("[DIAG] %s: MISMATCH  written=%s  readback=%s%s",
+                               name, value, after, abs_info)
         except Exception:
-            logger.info("  %s set to %s (read-back unavailable)", name, value)
+            logger.info("[DIAG] %s: written=%s  readback=<unavailable>",
+                        name, value)
+
     except AttributeError:
-        logger.debug("  %s not available on this camera", name)
+        logger.warning("[DIAG] %s: feature NOT PRESENT on this camera", name)
     except Exception as e:
-        logger.warning("  %s ERROR: %s", name, str(e))
+        logger.warning("[DIAG] %s: ERROR during set -- %s", name, str(e))
 
 
 def _decode_vendor_model(camera):
@@ -351,20 +422,20 @@ class CameraManager:
         for name in ('shutter', 'gain', 'brightness'):
             try:
                 feat = getattr(self.camera, name)
-                lo, hi = feat.value_range
+                lo, hi = _get_feature_range(feat)
+                if lo is None or hi is None:
+                    raise ValueError("range not readable for {}".format(name))
                 result[name] = {
                     'range': (int(lo), int(hi)),
-                    'value': int(feat.val),
+                    'value': int(feat.value),
                 }
+                logger.debug("get_exposure_info: %s range=[%d, %d] value=%d",
+                             name, lo, hi, feat.value)
             except Exception as e:
-                logger.debug("get_exposure_info: %s not available — %s", name, e)
-                # Provide safe fallback so the UI always gets usable data
-                fallbacks = {
-                    'shutter':    {'range': (0, 863),  'value': self.DEFAULT_EXPOSURE['shutter']},
-                    'gain':       {'range': (0, 683),  'value': self.DEFAULT_EXPOSURE['gain']},
-                    'brightness': {'range': (0, 255),  'value': self.DEFAULT_EXPOSURE['brightness']},
-                }
-                result[name] = fallbacks[name]
+                # Feature genuinely absent on this camera — skip it so the UI
+                # gets None for this key and can decide what to do.
+                logger.warning("get_exposure_info: %s not available — %s", name, e)
+                result[name] = None
         return result
 
     def get_feature_value(self, name):
@@ -616,6 +687,54 @@ class CameraManager:
             _apply_feature(self.camera, 'shutter',  0, mode='auto')
             _apply_feature(self.camera, 'gain',     0, mode='auto')
 
+    def _log_exposure_state(self, label="exposure state"):
+        """
+        Читает shutter / gain / brightness прямо из камеры и пишет в лог INFO.
+        Удобно вызывать до и после изменений для сравнения.
+        """
+        if self.camera is None:
+            return
+        parts = []
+        for name in ('shutter', 'gain', 'brightness'):
+            try:
+                feat = getattr(self.camera, name)
+                val  = feat.value
+                lo, hi = _get_feature_range(feat)
+                if lo is not None:
+                    parts.append("%s=%s [%s..%s]" % (name, val, lo, hi))
+                else:
+                    parts.append("%s=%s" % (name, val))
+            except Exception as ex:
+                parts.append("%s=<err:%s>" % (name, ex))
+        logger.info("[DIAG] %s: %s", label, "  ".join(parts))
+
+    def _flush_stale_frames(self):
+        """
+        Вычитывает и выбрасывает все кадры, уже находящиеся в DMA-буфере камеры.
+
+        Вызывается после изменения параметров экспозиции, чтобы следующий
+        кадр, полученный capture_single_frame(), гарантированно снят с
+        новыми настройками, а не является остатком старых.
+
+        Использует poll=True (немедленный возврат), поэтому не блокирует поток.
+        """
+        if self.camera is None:
+            return
+        flushed = 0
+        while True:
+            try:
+                frame = self.camera.dequeue(poll=True)
+                if frame is None:
+                    break
+                frame.enqueue()
+                flushed += 1
+            except Exception:
+                break
+        if flushed:
+            logger.info("[DIAG] _flush_stale_frames: сброшено %d устаревших кадров из буфера", flushed)
+        else:
+            logger.info("[DIAG] _flush_stale_frames: буфер пуст, нечего сбрасывать")
+
     def set_exposure(self, shutter=None, gain=None, brightness=None, exposure=None):
         """
         Устанавливает параметры экспозиции камеры в реальном времени.
@@ -627,7 +746,12 @@ class CameraManager:
             exposure:   raw-значение exposure (EV, авто-экспозиция)
         """
         if not self.is_connected or self.camera is None:
+            logger.warning("[DIAG] set_exposure called but camera is not connected")
             return
+
+        logger.info("[DIAG] set_exposure REQUEST: shutter=%s  gain=%s  brightness=%s",
+                    shutter, gain, brightness)
+
         if shutter is not None:
             _apply_feature(self.camera, 'shutter',    shutter,    mode='manual')
         if gain is not None:
@@ -636,6 +760,15 @@ class CameraManager:
             _apply_feature(self.camera, 'brightness', brightness, mode='manual')
         if exposure is not None:
             _apply_feature(self.camera, 'exposure',   exposure,   mode='manual')
+
+        # Читаем все три параметра обратно из камеры и пишем итоговую строку
+        self._log_exposure_state("set_exposure RESULT")
+
+        # Сбрасываем буфер камеры: после смены экспозиции в нём могут лежать
+        # кадры со старыми параметрами — вычитываем и выбрасываем их все.
+        # Только в режиме свободного захвата (без внешнего триггера).
+        if not self.use_trigger:
+            self._flush_stale_frames()
 
     # ── Триггер ───────────────────────────────────────────────────────────────
 
@@ -883,8 +1016,8 @@ class CameraManager:
 
                 arr = self._decode_frame(raw)
                 if arr is not None:
-                    logger.debug("Кадр захвачен: %s, min=%d, max=%d",
-                                 arr.shape, arr.min(), arr.max())
+                    logger.info("[DIAG] capture_single_frame: shape=%s  min=%d  max=%d  mean=%.1f",
+                                arr.shape, int(arr.min()), int(arr.max()), float(arr.mean()))
                 return arr
 
         except Exception as e:

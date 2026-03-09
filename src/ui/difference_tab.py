@@ -239,9 +239,13 @@ class DifferenceTab(QWidget):
 
     def on_exposure_changed(self, shutter, gain, brightness):
         """
-        User moved a slider in *this* tab → write to camera, then sync the
+        User moved a slider in *this* tab -> write to camera, then sync the
         master widget on CameraTab so both tabs stay in agreement.
         """
+        import logging
+        _log = logging.getLogger("camera")
+        _log.info("[DIAG] Slider moved (DifferenceTab) -> shutter=%s  gain=%s  brightness=%s",
+                  shutter, gain, brightness)
         self.main_window.camera_manager.set_exposure(
             shutter=shutter,
             gain=gain,

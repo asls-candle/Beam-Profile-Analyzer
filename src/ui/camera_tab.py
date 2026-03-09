@@ -275,25 +275,31 @@ class CameraTab(QWidget):
         local widget and the twin widget on DifferenceTab.
 
         Called once after a successful camera connection.
+        Skips any feature that the camera does not expose (info[name] is None).
         """
         info = self.main_window.camera_manager.get_exposure_info()
         if info is None:
             return
+
+        shutter_info    = info.get('shutter')
+        gain_info       = info.get('gain')
+        brightness_info = info.get('brightness')
+
         self.camera_controls.set_ranges(
-            shutter_range=info['shutter']['range'],
-            gain_range=info['gain']['range'],
-            brightness_range=info['brightness']['range'],
+            shutter_range=shutter_info['range']       if shutter_info    else None,
+            gain_range=gain_info['range']             if gain_info       else None,
+            brightness_range=brightness_info['range'] if brightness_info else None,
         )
         self.camera_controls.set_values(
-            shutter=info['shutter']['value'],
-            gain=info['gain']['value'],
-            brightness=info['brightness']['value'],
+            shutter=shutter_info['value']       if shutter_info    else None,
+            gain=gain_info['value']             if gain_info       else None,
+            brightness=brightness_info['value'] if brightness_info else None,
         )
         # Propagate to DifferenceTab twin (without triggering camera write)
         self._sync_twin_widget(
-            info['shutter']['value'],
-            info['gain']['value'],
-            info['brightness']['value'],
+            shutter_info['value']       if shutter_info    else None,
+            gain_info['value']          if gain_info       else None,
+            brightness_info['value']    if brightness_info else None,
         )
 
     def _sync_twin_widget(self, shutter, gain, brightness):
@@ -336,8 +342,12 @@ class CameraTab(QWidget):
 
     def on_exposure_changed(self, shutter, gain, brightness):
         """
-        User moved a slider → write to camera, propagate to twin widget.
+        User moved a slider -> write to camera, propagate to twin widget.
         """
+        import logging
+        _log = logging.getLogger("camera")
+        _log.info("[DIAG] Slider moved (CameraTab) -> shutter=%s  gain=%s  brightness=%s",
+                  shutter, gain, brightness)
         self.main_window.camera_manager.set_exposure(
             shutter=shutter,
             gain=gain,
