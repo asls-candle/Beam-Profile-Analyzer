@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (QMainWindow, QTabWidget, QMessageBox,
 from PyQt5.QtCore import QSettings
 import os
 import numpy as np
+import logging
 
 from src.ui.camera_tab import CameraTab
 from src.ui.background_tab import BackgroundTab
@@ -16,6 +17,9 @@ from src.analysis.image_analyzer import ImageAnalyzer
 from src.visualizer.plot_manager import PlotManager
 from src.data.exporter import DataExporter
 from src.data.importer import DataImporter
+
+logger = logging.getLogger("app")
+
 
 class MainWindow(QMainWindow):
     """
@@ -243,16 +247,16 @@ class MainWindow(QMainWindow):
         
         # Check if background was successfully collected
         has_background = self.image_reader.background is not None
-        print("MainWindow: Background collected: {}".format(has_background))
-        
+        logger.info("Background collected: %s", has_background)
+
         # Force update all tabs after background collection
-        print("MainWindow: Forcing update of all tabs after background collection")
+        logger.debug("Forcing update of all tabs after background collection")
         self.camera_tab.update_tab()
         self.background_tab.update_tab()
         self.difference_tab.update_tab()
-        
+
         # Switch to background tab to view result
-        print("MainWindow: Switching to background tab")
+        logger.debug("Switching to background tab")
         self.tabs.setCurrentWidget(self.background_tab)
         
         return result
@@ -469,6 +473,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 # Error in calculations should not interrupt file load,
                 # but should be logged and shown to user
+                logger.warning("Error in calculation parameters: %s", e)
                 print("Error in calculation parameters: {}".format(e))
                 QMessageBox.warning(self, "Warning", 
                                    "File loaded, but unable to calculate parameters: {}".format(str(e)))
@@ -500,6 +505,7 @@ class MainWindow(QMainWindow):
             # Show detailed error message
             error_message = "Error importing file {}:\n{}".format(filepath, str(e))
             print(error_message)
+            logger.error(error_message)
             QMessageBox.critical(self, "Import Error", error_message)
             
             return False

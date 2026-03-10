@@ -111,9 +111,9 @@ def _apply_feature(camera, name, value, mode='manual'):
                     logger.warning("[DIAG] %s: mode MISMATCH  requested=%s  actual=%s",
                                    name, mode, actual_mode)
                 else:
-                    logger.info("[DIAG] %s: mode OK  actual=%s", name, actual_mode)
+                    logger.debug("[DIAG] %s: mode OK  actual=%s", name, actual_mode)
             except Exception:
-                logger.info("[DIAG] %s: mode set to %s (read-back unavailable)", name, mode)
+                logger.debug("[DIAG] %s: mode set to %s (read-back unavailable)", name, mode)
         except Exception as ex:
             logger.warning("[DIAG] %s: mode FAILED  requested=%s  error=%s"
                            " -- camera may stay in auto mode", name, mode, ex)
@@ -149,13 +149,13 @@ def _apply_feature(camera, name, value, mode='manual'):
                 pass
 
             if after == value:
-                logger.info("[DIAG] %s: OK  written=%s  readback=%s%s",
+                logger.debug("[DIAG] %s: OK  written=%s  readback=%s%s",
                             name, value, after, abs_info)
             else:
                 logger.warning("[DIAG] %s: MISMATCH  written=%s  readback=%s%s",
                                name, value, after, abs_info)
         except Exception:
-            logger.info("[DIAG] %s: written=%s  readback=<unavailable>",
+            logger.debug("[DIAG] %s: written=%s  readback=<unavailable>",
                         name, value)
 
     except AttributeError:
@@ -271,6 +271,10 @@ class CameraManager:
 
         # Словарь обнаруженных камер: short_name -> info dict
         self.cameras = {}
+
+        # Кэш последних применённых значений экспозиции — чтобы не писать
+        # в камеру и не логировать одно и то же каждую секунду
+        self._last_exposure = {}
 
         logger.info("Инициализация CameraManager, use_trigger=%s, use_format7=%s",
                     use_trigger, use_format7)
@@ -731,13 +735,15 @@ class CameraManager:
             except Exception:
                 break
         if flushed:
-            logger.info("[DIAG] _flush_stale_frames: сброшено %d устаревших кадров из буфера", flushed)
+            logger.debug("[DIAG] _flush_stale_frames: сброшено %d устаревших кадров из буфера", flushed)
         else:
-            logger.info("[DIAG] _flush_stale_frames: буфер пуст, нечего сбрасывать")
+            logger.debug("[DIAG] _flush_stale_frames: буфер пуст, нечего сбрасывать")
 
     def set_exposure(self, shutter=None, gain=None, brightness=None, exposure=None):
         """
         Устанавливает параметры экспозиции камеры в реальном времени.
+        Параметр применяется к камере и логируется только если его значение
+        действительно изменилось относительно последнего применённого.
 
         Args:
             shutter:    raw-значение выдержки  (0 … 863 для Flea2)
@@ -749,20 +755,29 @@ class CameraManager:
             logger.warning("[DIAG] set_exposure called but camera is not connected")
             return
 
-        logger.info("[DIAG] set_exposure REQUEST: shutter=%s  gain=%s  brightness=%s",
-                    shutter, gain, brightness)
+        candidates = {
+            'shutter':    shutter,
+            'gain':       gain,
+            'brightness': brightness,
+            'exposure':   exposure,
+        }
 
-        if shutter is not None:
-            _apply_feature(self.camera, 'shutter',    shutter,    mode='manual')
-        if gain is not None:
-            _apply_feature(self.camera, 'gain',       gain,       mode='manual')
-        if brightness is not None:
-            _apply_feature(self.camera, 'brightness', brightness, mode='manual')
-        if exposure is not None:
-            _apply_feature(self.camera, 'exposure',   exposure,   mode='manual')
+        # Оставляем только те параметры, которые реально изменились
+        changed = {
+            name: val
+            for name, val in candidates.items()
+            if val is not None and self._last_exposure.get(name) != val
+        }
 
-        # Читаем все три параметра обратно из камеры и пишем итоговую строку
-        self._log_exposure_state("set_exposure RESULT")
+        if not changed:
+            return  # Ничего не изменилось — тихо выходим
+
+        logger.info("[DIAG] set_exposure CHANGED: %s",
+                    "  ".join("{}={}".format(k, v) for k, v in changed.items()))
+
+        for name, val in changed.items():
+            _apply_feature(self.camera, name, val, mode='manual')
+            self._last_exposure[name] = val
 
         # Сбрасываем буфер камеры: после смены экспозиции в нём могут лежать
         # кадры со старыми параметрами — вычитываем и выбрасываем их все.
@@ -1016,7 +1031,7 @@ class CameraManager:
 
                 arr = self._decode_frame(raw)
                 if arr is not None:
-                    logger.info("[DIAG] capture_single_frame: shape=%s  min=%d  max=%d  mean=%.1f",
+                    logger.debug("[DIAG] capture_single_frame: shape=%s  min=%d  max=%d  mean=%.1f",
                                 arr.shape, int(arr.min()), int(arr.max()), float(arr.mean()))
                 return arr
 
