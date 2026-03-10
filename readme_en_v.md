@@ -127,13 +127,22 @@ This cropped sub-array is used as input for **all** subsequent calculations
 After cropping, the pixel indices restart from 0 within the sub-array:
 
 ```
-i = 0, 1, …, (x_max − x_min − 1)   — column indices inside ROI
-j = 0, 1, …, (y_max − y_min − 1)   — row indices inside ROI
+i = 0, 1, …, (x_max − x_min − 1)   — column indices inside ROI (local)
+j = 0, 1, …, (y_max − y_min − 1)   — row indices inside ROI (local)
 ```
 
-These local indices are used when computing projections, centroid and RMS.
-The centroid result is then expressed relative to the **centre of the full
-(uncropped) image**, not the centre of the ROI.
+These **local** indices are used as-is for projections and RMS.
+
+For the **centroid**, the local index is converted back to the global
+(full-frame) pixel coordinate before the final mm conversion:
+
+```
+c_x_global = c_x_local + x_min_roi
+c_y_global = c_y_local + y_min_roi
+```
+
+This ensures the centroid is always expressed relative to the **centre of the
+full (uncropped) frame**, regardless of where the ROI is placed.
 
 ### 3.4 ROI at Export
 
@@ -202,32 +211,56 @@ y_coords[j] = j · pixel_size_y       (mm, origin at top edge of ROI)
 calculate_centroid(image, pixel_size_x, pixel_size_y)
 ```
 
-**Step 1 — Marginal projections (same as above, not normalised):**
+The function receives the **full (uncropped) image**. The full-frame dimensions
+are saved first, then the ROI crop is applied internally.
+
+**Step 1 — Save full-frame dimensions (before cropping):**
 
 ```
-P_x[i] = Σ_j  image[j, i]
-P_y[j] = Σ_i  image[j, i]
+full_H, full_W = image.shape
 ```
 
-**Step 2 — Intensity-weighted mean position (in pixels, within ROI):**
+**Step 2 — Apply ROI crop:**
+
+```
+processed_image = image[y_min:y_max, x_min:x_max]   (H' × W' sub-array)
+```
+
+**Step 3 — Marginal projections (not normalised) on the cropped image:**
+
+```
+P_x[i] = Σ_j  processed_image[j, i]
+P_y[j] = Σ_i  processed_image[j, i]
+```
+
+**Step 4 — Intensity-weighted mean position in local ROI pixels:**
 
 ```
            Σ_i  i · P_x[i]                   Σ_j  j · P_y[j]
-c_x_px = ─────────────────────    c_y_px = ─────────────────────
+c_x_loc = ─────────────────────    c_y_loc = ─────────────────────
                Σ_i  P_x[i]                        Σ_j  P_y[j]
 ```
 
-**Step 3 — Convert to millimetres, centred on the full image centre:**
+**Step 5 — Convert local ROI pixel to global frame pixel (add ROI offset):**
 
 ```
-centroid_x = ( c_x_px  −  W_roi / 2 ) · pixel_size_x   [mm]
-centroid_y = ( c_y_px  −  H_roi / 2 ) · pixel_size_y   [mm]
+c_x_px = c_x_loc + x_min_roi
+c_y_px = c_y_loc + y_min_roi
 ```
 
-where `W_roi`, `H_roi` are the pixel dimensions of the (possibly cropped) image.
+This step is **skipped** when no ROI is active (`c_x_px = c_x_loc`).
 
-> **Note:** The centroid is measured relative to the **geometric centre of the
-> ROI sub-array** (half-integer convention), then expressed in mm.
+**Step 6 — Convert to millimetres, centred on the full-frame centre:**
+
+```
+centroid_x = ( c_x_px  −  full_W / 2 ) · pixel_size_x   [mm]
+centroid_y = ( c_y_px  −  full_H / 2 ) · pixel_size_y   [mm]
+```
+
+> **Key property:** The centroid is always measured relative to the
+> **geometric centre of the full sensor frame**, both with and without an active
+> ROI. Selecting an ROI does not shift the coordinate origin — it only restricts
+> which pixels contribute to the intensity-weighted average.
 
 **Output:** `(centroid_x [mm], centroid_y [mm])`
 
@@ -244,11 +277,11 @@ calculate_rms(image, pixel_size_x, pixel_size_y)
 **Step 2 — Intensity-weighted standard deviation (in pixels):**
 
 ```
-            ┌  Σ_i  P_x[i] · (i − c_x_px)²  ┐½
+            ┌  Σ_i  P_x[i] · (i − c_x_px)²    ┐½
 rms_x_px =  │ ──────────────────────────────  │
             └         Σ_i  P_x[i]             ┘
 
-            ┌  Σ_j  P_y[j] · (j − c_y_px)²  ┐½
+            ┌  Σ_j  P_y[j] · (j − c_y_px)²    ┐½
 rms_y_px =  │ ──────────────────────────────  │
             └         Σ_j  P_y[j]             ┘
 ```
@@ -401,29 +434,32 @@ conversions in §4 and for the projection axes in the plots.
                      │                          │
                      ▼ DISPLAY                  ▼ ANALYSIS & EXPORT
           ┌──────────────────────┐    ┌──────────────────────────────────────────┐
-          │  PlotManager         │    │  [optional] ROI crop                     │
-          │  imshow jet,         │    │  image → image[y0:y1, x0:x1]             │
-          │  vmin=0 vmax=1       │    │  (float64, smaller H'×W')                │
+          │  PlotManager         │    │  calculate_centroid() receives FULL frame│
+          │  imshow jet,         │    │  full_W, full_H = image.shape            │
+          │  vmin=0 vmax=1       │    │  crop → image[y0:y1, x0:x1]  (H'×W')     │
           │  Projection plots    │    └───────────────────┬──────────────────────┘
-          │  on screen only      │                        │ float64 (H'×W')
+          │  on screen only      │                        │ full frame float64 (H×W)
           └──────────────────────┘          ┌─────────────┴────────────────┐
                                             │                              │
                                             ▼                              ▼
                                  ┌───────────────────────┐  ┌──────────────────────────┐
                                  │  calculate_centroid() │  │  calculate_rms()         │
-                                 │  P_x = sum(img,ax=0)  │  │  P_x = sum(img, ax=0)    │
-                                 │  P_y = sum(img,ax=1)  │  │  P_y = sum(img, ax=1)    │
-                                 │                       │  │                          │
-                                 │  c_x_px = Σ(i·P_x)    │  │  c_x_px = Σ(i·P_x)/ΣP_x  │
-                                 │           / Σ P_x     │  │                          │
-                                 │  c_y_px = Σ(j·P_y)    │  │  σ_x_px =                │
-                                 │           / Σ P_y     |  │  √(Σ P_x·(i−c_x)²/ΣP_x)  │
-                                 │                       │  │                          │
-                                 │  cx = (c_x_px−W/2)    │  │  rms_x = σ_x_px          │
-                                 │       · px_size_x     │  │          · pixel_size_x  │
-                                 │  cy = (c_y_px−H/2)    │  │  rms_y = σ_y_px          │
-                                 │       · px_size_y     │  │          · pixel_size_y  │
-                                 │  → cx, cy  [mm]       │  │  → rms_x, rms_y  [mm]    │
+                                 │                       │  │  P_x = sum(img, ax=0)    │
+                                 │  full_W,full_H =      │  │  P_y = sum(img, ax=1)    │
+                                 │    image.shape        │  │                          │
+                                 │  crop → ROI sub-array │  │  c_x_loc=Σ(i·P_x)/ΣP_x   │
+                                 │  P_x = sum(roi,ax=0)  │  │                          │
+                                 │  P_y = sum(roi,ax=1)  │  │  σ_x_px =                │
+                                 │                       │  │  √(Σ P_x·(i−c_x)²/ΣP_x)  │
+                                 │  c_x_loc=Σ(i·P_x)/ΣP_x│  │                          │
+                                 │  c_x_px=c_x_loc+x_min │  │  rms_x = σ_x_px          │
+                                 │  c_y_px=c_y_loc+y_min │  │          · pixel_size_x  │
+                                 │                       │  │  rms_y = σ_y_px          │
+                                 │  cx=(c_x_px−full_W/2) │  │          · pixel_size_y  │
+                                 │     · pixel_size_x    │  │  → rms_x, rms_y  [mm]    │
+                                 │  cy=(c_y_px−full_H/2) │  │                          │
+                                 │     · pixel_size_y    │  │  (RMS uses local ROI     │
+                                 │  → cx, cy  [mm]       │  │   pixel indices only)    │
                                  └───────────────────────┘  └──────────────────────────┘
                                             │                              │
                                             └──────────────┬───────────────┘
@@ -465,8 +501,15 @@ conversions in §4 and for the projection axes in the plots.
   space**, then scaled to millimetres using the look-up table pixel size. No
   intermediate mm-space grid is used for the integrals.
 
-* **ROI effect on centroid/RMS:** When an ROI is active, the centroid is expressed
-  relative to the **centre of the ROI sub-array**, not the full sensor centre.
+* **ROI effect on centroid/RMS:** When an ROI is active, the centroid is still
+  expressed relative to the **centre of the full sensor frame**. The algorithm
+  computes the intensity-weighted centre in local ROI pixel coordinates, then adds
+  the ROI corner offset `(x_min_roi, y_min_roi)` to obtain the global pixel
+  coordinate before converting to mm. This means the centroid value is directly
+  comparable between ROI and non-ROI measurements.
+  RMS, by contrast, is a spread measure (second central moment) and is computed
+  entirely within local ROI pixel space — it reflects only the extent of the beam
+  within the selected region.
 
 * **Median filter:** The code contains a median filter (`apply_median_filter`) but
   it is **disabled** (commented out). No spatial filtering is applied to the data.
