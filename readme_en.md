@@ -22,67 +22,65 @@ The diagram shows which data is used **only for display** in the UI, and which d
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                             CAMERA (IEEE 1394 / FireWire)                        │
+│                             CAMERA (IEEE 1394 / FireWire)                       │
 │                  FORMAT7_0 · MONO16 · big-endian · dtype: uint16                │
 └─────────────────────────────────┬───────────────────────────────────────────────┘
                                   │  raw bytes (DMA buffer)
                                   ▼
-                    ┌─────────────────────────┐
+                    ┌──────────────────────────┐
                     │   _decode_frame()        │
                     │   uint16 → ndarray(H,W)  │
-                    └────────────┬────────────┘
+                    └────────────┬─────────────┘
                                  │  ndarray (H,W) uint16
           ┌──────────────────────┴──────────────────────┐
-          │ Single frame                                  │ Capture N background frames
+          │ Single frame                                 │ Capture N background frames
           ▼                                              ▼
 ┌─────────────────────────┐                  ┌──────────────────────────────┐
-│ normalize(frame)         │                  │ capture_background_frames(N) │
+│ normalize(frame)        │                 │ capture_background_frames(N)  │
 │ uint16 → float64 [0,1]  │                  │ each frame → float64         │
 │ by its own min/max      │                  │ stack shape (N,H,W) float64  │
 └──────────┬──────────────┘                  └──────────────┬───────────────┘
-           │ current_frame                                   │ background_frames
-           │ float64 [0,1]                                   ▼
-           │                                  ┌─────────────────────────────┐
+           │ current_frame                                  │ background_frames
+           │ float64 [0,1]                                  ▼
+           │                                  ┌──────────────────────────────┐
            │                                  │ process_background()         │
            │                                  │ mean over axis N             │
            │                                  │ float64, values in uint16    │
-           │                                  └──────────────┬──────────────┘
+           │                                  └──────────────┬───────────────┘
            │                                                 │ raw_background float64
-           │                                  ┌─────────────┴──────────────┐
+           │                                  ┌──────────────┴──────────────┐
            │                                  │ normalize(bg, ref=raw_shot) │
            │                                  │ scaled by shot's min/max    │
-           │                                  │ float64 ≈ [0, ≤1.0]        │
+           │                                  │ float64 ≈ [0, ≤1.0]         │
            │                                  └──────────────┬──────────────┘
            │                                                 │ background float64
            │◄────────────────────────────────────────────────┤
            │                                                 │
            ▼                                                 ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  _calculate_difference()                                              │
+│  _calculate_difference()                                             │
 │  raw_shot.astype(float64) − raw_background.astype(float64)           │
 │  clip negatives to 0                                                 │
 │  normalize(raw_diff)  [by raw_diff's own min/max]                    │
 └──────────────────────────────────┬───────────────────────────────────┘
                                    │ difference  float64 [0,1]
             ┌──────────────────────┼──────────────────────────────────┐
-            │                      │                                   │
-            ▼                      ▼                                   ▼
-┌────────────────────┐  ┌──────────────────────────────┐  ┌─────────────────────┐
+            │                      │                                  │
+            ▼                      ▼                                  ▼
+┌────────────────────┐  ┌──────────────────────────────┐   ┌─────────────────────┐
 │  DISPLAY ONLY      │  │  ANALYSIS (centroid, RMS)     │  │  EXPORT             │
 │                    │  │                               │  │                     │
-│ apply_median_filter│  │  [opt.] apply_roi(difference) │  │  [opt.] crop to ROI │
-│ kernel=3           │  │  pixel-space slice            │  │  pixel-space slice  │
-│ (noise suppressed  │  │  ↓                            │  │  ↓                  │
-│  on screen only)   │  │  calculate_centroid()         │  │  export_csv()       │
-│ ↓                  │  │  calculate_rms()              │  │  → .csv + .json     │
-│ heatmap + profiles │  │  result in mm                 │  │                     │
-│ in UI              │  │  ↓                            │  │  export_png()       │
+│ heatmap + profiles │  │  [opt.] apply_roi(difference) │  │  [opt.] crop to ROI │
+│ in UI              │  │  pixel-space slice            │  │  pixel-space slice  │
+│                    │  │  ↓                            │  │  ↓                  │
+│                    │  │  calculate_centroid()         │  │  export_csv()       │
+│                    │  │  calculate_rms()              │  │  → .csv + .json     │
+│                    │  │  result in mm                 │  │                     │
+│                    │  │  ↓                            │  │  export_png()       │
 │                    │  │  label in UI                  │  │  → .png (jet, [0,1])│
-└────────────────────┘  └──────────────────────────────┘  └─────────────────────┘
+└────────────────────┘  └──────────────────────────────┘   └─────────────────────┘
      ↑ screen only            ↑ screen + export metadata        ↑ files on disk
 ```
-
-**Important:** the median filter is applied only to the data passed to the display widget. `calculate_centroid`, `calculate_rms`, and the exporter all receive the **original** (unfiltered) `difference` image.
 
 ---
 
