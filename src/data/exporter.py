@@ -76,9 +76,9 @@ class DataExporter:
                         writer = csv.writer(csvfile)
                         if plain.ndim == 2:
                             for row in plain:
-                                writer.writerow(["{:.7f}".format(float(x)) for x in row])
+                                writer.writerow(["{:.17f}".format(float(x)) for x in row])
                         else:
-                            writer.writerow(["{:.7f}".format(float(x)) for x in plain.flatten()])
+                            writer.writerow(["{:.17f}".format(float(x)) for x in plain.flatten()])
 
             print("Экспортированы данные в папку {}: метаданные и массивы в отдельных CSV файлах.".format(folder_path))
             return True

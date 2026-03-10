@@ -436,7 +436,8 @@ class DifferenceTab(QWidget):
         self._pixel_size_x = pixel_size_x
         self._pixel_size_y = pixel_size_y
 
-        img_data = apply_median_filter(np.asarray(difference_image.data), kernel_size=3)
+        img_data = np.asarray(difference_image.data)
+        # img_data = apply_median_filter(np.asarray(difference_image.data), kernel_size=3)
         self._img_height, self._img_width = img_data.shape
         h, w = self._img_height, self._img_width
         x_mm = (np.arange(w) - w / 2) * pixel_size_x
