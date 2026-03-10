@@ -104,44 +104,53 @@ class ImageAnalyzer:
     def calculate_centroid(self, image, pixel_size_x, pixel_size_y):
         """
         Рассчитывает координаты центроида изображения в центрированной системе координат
+        относительно центра полного кадра (с учётом смещения ROI).
         
         Args:
-            image: Двумерный массив значений светимости
+            image: Двумерный массив значений светимости (полный кадр, до обрезки ROI)
             pixel_size_x: Размер пикселя по оси X (мм)
             pixel_size_y: Размер пикселя по оси Y (мм)
             
         Returns:
-            (centroid_x, centroid_y): Координаты центроида (мм) в центрированной системе координат
+            (centroid_x, centroid_y): Координаты центроида (мм) относительно центра полного кадра
         """
         if image is None or image.size == 0:
             return 0, 0
-            
+
+        # Запоминаем размер полного кадра ДО обрезки ROI
+        full_y_size, full_x_size = image.shape
+
         # Применяем ROI если задан
         processed_image = self.apply_roi(image)
-        
-        # Создаем координатную сетку (в пикселях)
+
+        # Создаем координатную сетку внутри ROI (в пикселях)
         y_size, x_size = processed_image.shape
-        x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-        
+
         # Вычисляем суммы интенсивности по осям
         x_proj = np.sum(processed_image, axis=0)
         y_proj = np.sum(processed_image, axis=1)
-        
+
         # Избегаем деления на ноль
         x_sum = np.sum(x_proj)
         y_sum = np.sum(y_proj)
-        
+
         if x_sum == 0 or y_sum == 0:
             return 0, 0
-        
-        # Вычисляем взвешенное среднее положение (центроид) в пикселях
+
+        # Вычисляем центроид в пикселях относительно начала ROI
         centroid_x_px = np.sum(np.arange(x_size) * x_proj) / x_sum
         centroid_y_px = np.sum(np.arange(y_size) * y_proj) / y_sum
-        
-        # Преобразование в милиметры и центрирование относительно середины изображения
-        centroid_x = (centroid_x_px - x_size / 2) * pixel_size_x
-        centroid_y = (centroid_y_px - y_size / 2) * pixel_size_y
-        
+
+        # Пересчёт в координаты полного кадра: добавляем смещение ROI
+        if self.roi is not None:
+            x_min_roi, y_min_roi, _, _ = self.roi
+            centroid_x_px += x_min_roi
+            centroid_y_px += y_min_roi
+
+        # Преобразование в мм с центрированием относительно центра полного кадра
+        centroid_x = (centroid_x_px - full_x_size / 2) * pixel_size_x
+        centroid_y = (centroid_y_px - full_y_size / 2) * pixel_size_y
+
         return centroid_x, centroid_y
     
     def calculate_rms(self, image, pixel_size_x, pixel_size_y):
