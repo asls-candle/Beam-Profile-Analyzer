@@ -112,7 +112,7 @@ class DataImporter:
                     raw_difference[raw_difference < 0] = 0
                     difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
                     # Применяем медианный фильтр к разностному изображению
-                    difference = apply_median_filter(difference, kernel_size=3)
+                    # difference = apply_median_filter(difference, kernel_size=3)
                 else:
                     print("Размеры снимка и фона не совпадают")
                     difference = None
@@ -313,7 +313,7 @@ class DataImporter:
                         raw_difference[raw_difference < 0] = 0
                         difference = ImageNormalizer.normalize(raw_difference, reference_image=shot)
                         # Применяем медианный фильтр к разностному изображению
-                        difference = apply_median_filter(difference, kernel_size=3)
+                        # difference = apply_median_filter(difference, kernel_size=3)
                     else:
                         print("Размеры снимка и фона не совпадают")
                         difference = None
@@ -651,7 +651,7 @@ class DataImporter:
                 difference[difference < 0] = 0
                 # Нормализуем и фильтруем, чтобы привести к единому виду
                 difference = ImageNormalizer.normalize(difference, reference_image=result_data['shot'])
-                difference = apply_median_filter(difference, kernel_size=3)
+                # difference = apply_median_filter(difference, kernel_size=3)
                 result_data['difference'] = difference
                 logger.info("Автоматически рассчитана разность shot - background")
             

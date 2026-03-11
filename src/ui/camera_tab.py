@@ -138,7 +138,7 @@ class CameraTab(QWidget):
         bg_frames_row = QHBoxLayout()
         bg_frames_row.addWidget(QLabel("Frames:"))
         self.bg_frames_spinbox = QSpinBox()
-        self.bg_frames_spinbox.setRange(1, 100)
+        self.bg_frames_spinbox.setRange(1, 400)
         self.bg_frames_spinbox.setValue(40)
         bg_frames_row.addWidget(self.bg_frames_spinbox)
         self.get_background_btn      = QPushButton("Get background")

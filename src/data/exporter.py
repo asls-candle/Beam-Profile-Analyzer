@@ -70,7 +70,7 @@ class DataExporter:
                 if isinstance(value, np.ndarray):
                     # Конвертируем в plain ndarray, чтобы итерация по строкам
                     # всегда давала обычные float, а не ma.masked.
-                    plain = _to_plain_array(value)
+                    plain = np.asarray(value)
                     array_path = os.path.join(folder_path, "{}.csv".format(key))
                     with open(array_path, 'w', newline='') as csvfile:
                         writer = csv.writer(csvfile)
@@ -98,7 +98,7 @@ class DataExporter:
         Returns:
             np.ndarray: RGB изображение с применённой цветовой картой
         """
-        plain = _to_plain_array(data)
+        plain = np.asarray(data)
         if plain.max() > plain.min():
             normalized = (plain - plain.min()) / (plain.max() - plain.min())
         else:
@@ -155,7 +155,7 @@ class DataExporter:
 
                 # Конвертируем в plain ndarray (MaskedArray → filled(0))
                 # чтобы imshow не получал masked-значения и не менял отображение
-                plain = _to_plain_array(data)
+                plain = np.asarray(data)
 
                 height, width = plain.shape
 

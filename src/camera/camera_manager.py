@@ -1012,7 +1012,7 @@ class CameraManager:
 
         try:
             with self.lock:
-                frame = self._dequeue_with_retry()
+                frame = self._dequeue_with_retry() # unit16
 
                 if frame is None:
                     if self.use_trigger:

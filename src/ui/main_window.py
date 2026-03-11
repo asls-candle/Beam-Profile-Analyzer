@@ -283,13 +283,13 @@ class MainWindow(QMainWindow):
                     pixel_size_y = camera_info["pixel_size_y"]
                     
                     self.camera_data["centroid"] = self.image_analyzer.calculate_centroid(
-                        self.camera_data["current_frame"],
+                        self.camera_data["difference"],
                         pixel_size_x,
                         pixel_size_y
                     )
                     
                     self.camera_data["rms"] = self.image_analyzer.calculate_rms(
-                        self.camera_data["current_frame"],
+                        self.camera_data["difference"],
                         pixel_size_x,
                         pixel_size_y
                     )
