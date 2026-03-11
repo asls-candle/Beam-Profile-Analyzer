@@ -51,12 +51,12 @@ class PlotManager:
             data_downsampled = data[::step_y, ::step_x]
             x_downsampled = x_mm[::step_x]
             y_downsampled = y_mm[::step_y]
-            im = ax.imshow(data_downsampled, cmap=self.colormap, origin='lower',
-                           extent=[x_downsampled[0], x_downsampled[-1], y_downsampled[0], y_downsampled[-1]],
+            im = ax.imshow(data_downsampled, cmap=self.colormap,
+                           extent=[x_downsampled[0], x_downsampled[-1], y_downsampled[-1], y_downsampled[0]],
                            aspect='auto', interpolation='bilinear')
         else:
-            im = ax.imshow(data, cmap=self.colormap, origin='lower',
-                           extent=[x_mm[0], x_mm[-1], y_mm[0], y_mm[-1]],
+            im = ax.imshow(data, cmap=self.colormap,
+                           extent=[x_mm[0], x_mm[-1], y_mm[-1], y_mm[0]],
                            aspect='auto', interpolation='bilinear')
         
         # Добавляем заголовок и подписи осей

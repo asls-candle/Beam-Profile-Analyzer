@@ -7,18 +7,13 @@ class ImageAnalyzer:
     """
     Класс для анализа изображений с профилем лазерного пучка.
     
-    Этот класс предоставляет инструменты для всестороннего анализа профиля пучка, 
-    включая расчет геометрических характеристик, статистических параметров 
-    и аппроксимацию распределения интенсивности функцией Гаусса.
+    Этот класс предоставляет инструменты для расчет статистических параметров пучка.
     
     Основные функциональные возможности:
     - Задание и применение области интереса (ROI) для фокусировки анализа
-    - Расчет проекций интенсивности пучка на оси X и Y
     - Вычисление центроидов (центров масс) пучка по обеим осям
     - Расчет среднеквадратичных (RMS) размеров пучка
-    - Аппроксимация профилей пучка гауссовой функцией с определением 
-      параметров распределения (амплитуда, центр, ширина)
-    
+
     Все пространственные расчеты могут быть выражены в физических единицах (мм)
     при условии, что предоставлены размеры пикселей по каждой из осей.
     
@@ -58,48 +53,6 @@ class ImageAnalyzer:
             
         x_min, y_min, x_max, y_max = self.roi
         return image[y_min:y_max, x_min:x_max]
-    
-    def calculate_projections(self, image, pixel_size_x, pixel_size_y):
-        """
-        Рассчитывает проекции изображения на оси X и Y
-        
-        Args:
-            image: Двумерный массив значений светимости
-            pixel_size_x: Размер пикселя по оси X (мм)
-            pixel_size_y: Размер пикселя по оси Y (мм)
-            
-        Returns:
-            x_coords: Координаты по оси X (мм)
-            x_proj: Проекция на ось X
-            y_coords: Координаты по оси Y (мм)
-            y_proj: Проекция на ось Y
-        """
-        if image is None or image.size == 0:
-            return None, None, None, None
-            
-        # Применяем ROI если задан
-        processed_image = self.apply_roi(image)
-        
-        # Создаем координатную сетку (в пикселях)
-        y_size, x_size = processed_image.shape
-        x_grid = np.arange(x_size)
-        y_grid = np.arange(y_size)
-        
-        # Проекция на оси X и Y (сумма интенсивности по соответствующим осям)
-        x_proj = np.sum(processed_image, axis=0)
-        y_proj = np.sum(processed_image, axis=1)
-        
-        # Нормализация проекций относительно максимального значения
-        if np.max(x_proj) > 0:
-            x_proj = x_proj / np.max(x_proj)
-        if np.max(y_proj) > 0:
-            y_proj = y_proj / np.max(y_proj)
-        
-        # Преобразование в милиметры
-        x_coords = x_grid * pixel_size_x
-        y_coords = y_grid * pixel_size_y
-        
-        return x_coords, x_proj, y_coords, y_proj
     
     def calculate_centroid(self, image, pixel_size_x, pixel_size_y):
         """
@@ -199,53 +152,56 @@ class ImageAnalyzer:
         rms_y = rms_y_px * pixel_size_y
         
         return rms_x, rms_y
+
+
+    # Для последующей реализации 
         
-    @staticmethod
-    def gaussian(x, a, mu, sigma):
-        """
-        Функция Гаусса для аппроксимации распределения
-        
-        Args:
-            x: Массив координат
-            a: Амплитуда
-            mu: Среднее значение
-            sigma: Стандартное отклонение
-            
-        Returns:
-            Значения функции Гаусса в точках x
-        """
-        return a * np.exp(-(x - mu)**2 / (2 * sigma**2))
+    # @staticmethod
+    # def gaussian(x, a, mu, sigma):
+    #     """
+    #     Функция Гаусса для аппроксимации распределения
+    #      
+    #      Args:
+    #          x: Массив координат
+    #          a: Амплитуда
+    #          mu: Среднее значение
+    #          sigma: Стандартное отклонение
+    #           
+    #      Returns:
+    #          Значения функции Гаусса в точках x
+    #     """
+    #     return a * np.exp(-(x - mu)**2 / (2 * sigma**2))
     
-    def fit_gaussian(self, coords, proj):
-        """
-        Аппроксимирует проекцию распределения функцией Гаусса
-        
-        Args:
-            coords: Массив координат по оси
-            proj: Проекция на ось
+    # def fit_gaussian(self, coords, proj):
+    #     """
+    #     Аппроксимирует проекцию распределения функцией Гаусса
+    #    
+    #     Args:
+    #         coords: Массив координат по оси
+    #         proj: Проекция на ось
             
-        Returns:
-            (a, mu, sigma): Параметры функции Гаусса
-            fitted_curve: Значения аппроксимирующей функции
-        """
-        if coords is None or proj is None or len(coords) == 0 or len(proj) == 0:
-            return (0, 0, 0), np.zeros_like(coords) if coords is not None else np.array([])
-            
-        # Начальное приближение параметров
-        a_init = np.max(proj)
-        mu_init = coords[np.argmax(proj)]
-        sigma_init = (np.max(coords) - np.min(coords)) / 6  # Примерно 3-sigma
-        
-        try:
-            # Аппроксимация функцией Гаусса
-            popt, _ = curve_fit(self.gaussian, coords, proj, p0=[a_init, mu_init, sigma_init])
-            a, mu, sigma = popt
-            
-            # Вычисление аппроксимирующей кривой
-            fitted_curve = self.gaussian(coords, a, mu, sigma)
-            
-            return (a, mu, sigma), fitted_curve
-        except:
-            # В случае ошибки аппроксимации возвращаем начальное приближение
-            fitted_curve = self.gaussian(coords, a_init, mu_init, sigma_init)
-            return (a_init, mu_init, sigma_init), fitted_curve
+    #     Returns:
+    #         (a, mu, sigma): Параметры функции Гаусса
+    #         fitted_curve: Значения аппроксимирующей функции
+    #     """
+    #     if coords is None or proj is None or len(coords) == 0 or len(proj) == 0:
+    #         return (0, 0, 0), np.zeros_like(coords) if coords is not None else np.array([])
+    #        
+    #     # Начальное приближение параметров
+    #     a_init = np.max(proj)
+    #     mu_init = coords[np.argmax(proj)]
+    #     sigma_init = (np.max(coords) - np.min(coords)) / 6  # Примерно 3-sigma
+    #    
+    #     try:
+    #         # Аппроксимация функцией Гаусса
+    #         popt, _ = curve_fit(self.gaussian, coords, proj, p0=[a_init, mu_init, sigma_init])
+    #         a, mu, sigma = popt
+    #         
+    #         # Вычисление аппроксимирующей кривой
+    #         fitted_curve = self.gaussian(coords, a, mu, sigma)
+    #        
+    #         return (a, mu, sigma), fitted_curve
+    #     except:
+    #         # В случае ошибки аппроксимации возвращаем начальное приближение
+    #         fitted_curve = self.gaussian(coords, a_init, mu_init, sigma_init)
+    #         return (a_init, mu_init, sigma_init), fitted_curve
