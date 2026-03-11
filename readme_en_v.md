@@ -155,11 +155,11 @@ The `resolution` metadata field is updated accordingly.
 │                    Full image  (H × W)                          │
 │                                                                 │
 │   ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐                             │
-│   │                                 │                           │
-│   │        ROI sub-array            │  ← used for all analysis  │
-│   │   image[y_min:y_max,            │                           │
-│   │          x_min:x_max]           │                           │
-│   │                                 │                           │
+│   │                               │                             │
+│   │        ROI sub-array          │  ← used for all analysis    │
+│   │   image[y_min:y_max,          │                             │
+│   │          x_min:x_max]         │                             │
+│   │                               │                             │
 │   └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘                             │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘

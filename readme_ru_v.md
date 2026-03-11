@@ -404,8 +404,8 @@ rms_y = rms_y_px · pixel_size_y   [мм]
 │  _decode_frame()                                                                   │
 │  np.frombuffer(raw, dtype='>u2').reshape(H, W) → ndarray uint16                    │
 └─────────────────┬──────────────────────────────────────────────────┬───────────────┘
-                  │ uint16 (H×W)                                      │ uint16 (H×W) × N кадров
-                  ▼                                                   ▼
+                  │ uint16 (H×W)                                     │ uint16 (H×W) × N кадров
+                  ▼                                                  ▼
 ┌─────────────────────────────────────┐      ┌────────────────────────────────────────┐
 │  raw_current_frame  (uint16)        │      │  capture_background_frames()           │
 │  хранится для вычисления разности   │      │  frames.astype(float64)                │
@@ -441,19 +441,19 @@ rms_y = rms_y_px · pixel_size_y   [мм]
                                              │                             │
                                              ▼                             ▼
                                   ┌──────────────────────────┐  ┌────────────────────────────┐
-                                  │  calculate_centroid()    │  │  calculate_rms()            │
+                                  │  calculate_centroid()    │  │  calculate_rms()           │
                                   │                          │  │  crop→ROI(H'×W') внутри    │
                                   │  full_W, full_H сохр.    │  │  P_x = sum(roi, ax=0)      │
                                   │  crop → ROI (H'×W')      │  │  P_y = sum(roi, ax=1)      │
                                   │  P_x = sum(roi, ax=0)    │  │                            │
-                                  │  P_y = sum(roi, ax=1)    │  │  c_x_loc=Σ(i·P_x)/ΣP_x    │
+                                  │  P_y = sum(roi, ax=1)    │  │  c_x_loc=Σ(i·P_x)/ΣP_x     │
                                   │                          │  │                            │
-                                  │  c_x_loc=Σ(i·P_x)/ΣP_x  │  │  σ_x_px =                  │
-                                  │  c_x_px=c_x_loc+x_min   │  │  √(Σ P_x·(i−c_x)²/ΣP_x)  │
-                                  │  c_y_px=c_y_loc+y_min   │  │                            │
-                                  │                          │  │  rms_x = σ_x_px · Δx      │
-                                  │  cx=(c_x_px−full_W/2)·Δx│  │  rms_y = σ_y_px · Δy      │
-                                  │  cy=(c_y_px−full_H/2)·Δy│  │  → rms_x, rms_y  [мм]     │
+                                  │  c_x_loc=Σ(i·P_x)/ΣP_x   │  │  σ_x_px =                  │
+                                  │  c_x_px=c_x_loc+x_min    │  │  √(Σ P_x·(i−c_x)²/ΣP_x)    │
+                                  │  c_y_px=c_y_loc+y_min    │  │                            │
+                                  │                          │  │  rms_x = σ_x_px · Δx       │
+                                  │  cx=(c_x_px−full_W/2)·Δx │  │  rms_y = σ_y_px · Δy       │
+                                  │  cy=(c_y_px−full_H/2)·Δy │  │  → rms_x, rms_y  [мм]      │
                                   │  → cx, cy  [мм]          │  │                            │
                                   │  (относит. центра        │  │  (СКО — в локальных        │
                                   │   полного кадра)         │  │   пикселях ROI)            │
