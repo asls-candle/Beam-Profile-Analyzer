@@ -57,10 +57,9 @@ class ImageNormalizer:
             max_val = np.max(image_float)
             logger.debug("Используются min/max из самого изображения: [{}, {}]".format(min_val, max_val))
         
-        # Избегаем деления на ноль
         if max_val == min_val:
-            logger.warning("Референсный диапазон содержит одинаковые значения. Возвращается нулевой массив.")
-            return np.zeros_like(image_float, dtype=np.float64)
+            logger.warning("Референсный диапазон содержит одинаковые значения. Возвращается матрица, заполненная max_val.")
+            return np.full_like(image_float, max_val, dtype=np.float64)
         
         # Нормализация в диапазон [0, 1] с использованием референсных min/max
         normalized = (image_float - min_val) / (max_val - min_val)

@@ -312,5 +312,5 @@ class ImageReader:
         raw_diff[raw_diff < 0] = 0
         
         # Нормализуем результат, используя текущий кадр как референс
-        self.difference = ImageNormalizer.normalize(raw_diff)
+        self.difference = ImageNormalizer.normalize(raw_diff, reference_image=self.raw_current_frame)
         return True
