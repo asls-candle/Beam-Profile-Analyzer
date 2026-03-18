@@ -47,19 +47,22 @@ class ImageNormalizer:
         image_float = image.astype(np.float64)
         
         # Определяем источник для min/max значений
-        if reference_image is not None and reference_image.size > 0:
-            reference_float = reference_image.astype(np.float64)
-            min_val = np.min(reference_float)
-            max_val = np.max(reference_float)
-            logger.debug("Используются min/max из референсного изображения: [{}, {}]".format(min_val, max_val))
-        else:
-            min_val = np.min(image_float)
-            max_val = np.max(image_float)
-            logger.debug("Используются min/max из самого изображения: [{}, {}]".format(min_val, max_val))
+        # if reference_image is not None and reference_image.size > 0:
+        #     reference_float = reference_image.astype(np.float64)
+        #     min_val = np.min(reference_float)
+        #     max_val = np.max(reference_float)
+        #     logger.debug("Используются min/max из референсного изображения: [{}, {}]".format(min_val, max_val))
+        # else:
+        #     min_val = np.min(image_float)
+        #     max_val = np.max(image_float)
+        #     logger.debug("Используются min/max из самого изображения: [{}, {}]".format(min_val, max_val))
         
-        if max_val == min_val:
-            logger.warning("Референсный диапазон содержит одинаковые значения. Возвращается матрица, заполненная max_val.")
-            return np.full_like(image_float, max_val, dtype=np.float64)
+        # if max_val == min_val:
+        #     logger.warning("Референсный диапазон содержит одинаковые значения. Возвращается матрица, заполненная max_val.")
+        #     return np.full_like(image_float, max_val, dtype=np.float64)
+
+        min_val = 0
+        max_val = 65520
         
         # Нормализация в диапазон [0, 1] с использованием референсных min/max
         normalized = (image_float - min_val) / (max_val - min_val)
