@@ -7,7 +7,7 @@ import numpy as np
 import logging
 from threading import Lock
 
-os.environ['DC1394_V2_STRATEGY'] = '1'
+# os.environ['DC1394_V2_STRATEGY'] = '1'
 
 try:
     from pydc1394 import Camera, Context
